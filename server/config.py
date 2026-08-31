@@ -1,4 +1,3 @@
-from pydantic_settings import BaseSettings if False else object
 from pydantic import BaseModel
 
 class ServerConfig(BaseModel):
