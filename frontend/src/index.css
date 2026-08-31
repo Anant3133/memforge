@@ -1,0 +1,120 @@
+:root {
+  --bg-primary: #0a0d14;
+  --bg-secondary: #101522;
+  --bg-card: rgba(18, 24, 38, 0.75);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-highlight: rgba(0, 255, 170, 0.3);
+  
+  --accent-cyan: #00f2fe;
+  --accent-emerald: #00ffaa;
+  --accent-purple: #9d4edd;
+  --accent-red: #ff477e;
+  --accent-amber: #ffaa00;
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Fira Code', monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+  background-image: 
+    radial-gradient(circle at 15% 15%, rgba(0, 242, 254, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 85% 85%, rgba(157, 78, 221, 0.05) 0%, transparent 40%);
+}
+
+/* Glassmorphism Card Style */
+.glass-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: all 0.25s ease-in-out;
+}
+
+.glass-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Token Highlights */
+.token-draft {
+  background: rgba(0, 255, 170, 0.18);
+  color: #00ffaa;
+  border-bottom: 2px solid #00ffaa;
+  padding: 1px 3px;
+  border-radius: 3px;
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  margin: 1px;
+}
+
+.token-target {
+  background: rgba(0, 242, 254, 0.18);
+  color: #00f2fe;
+  border-bottom: 2px solid #00f2fe;
+  padding: 1px 3px;
+  border-radius: 3px;
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  margin: 1px;
+}
+
+/* Heatmap Grid */
+.block-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14px, 1fr));
+  gap: 3px;
+}
+
+.block-cell {
+  aspect-ratio: 1;
+  border-radius: 2px;
+  transition: transform 0.15s ease, background-color 0.2s ease;
+}
+
+.block-free {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.block-allocated {
+  background-color: var(--accent-emerald);
+  box-shadow: 0 0 6px rgba(0, 255, 170, 0.4);
+}
+
+.block-cell:hover {
+  transform: scale(1.4);
+  z-index: 10;
+}

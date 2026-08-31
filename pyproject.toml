@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0.0", "pybind11>=2.12.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memforge"
+version = "0.1.0"
+description = "Custom high-performance LLM inference engine from scratch"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "MemForge Team" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C++",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "torch>=2.2.0",
+    "transformers>=4.40.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "pydantic>=2.7.0",
+    "websockets>=12.0",
+    "rich>=13.7.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+python_files = "test_*.py"
