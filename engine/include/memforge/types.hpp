@@ -54,8 +54,11 @@ struct SequenceStepInfo {
 struct SchedulerStepResult {
     std::vector<SequenceStepInfo> running_sequences;
     std::vector<SequenceId> finished_sequence_ids;
+    std::vector<SequenceId> preempted_sequence_ids; // Evicted under memory pressure, will be recomputed
+    std::vector<SequenceId> aborted_sequence_ids;   // Unschedulable (request larger than the whole pool)
     size_t num_free_blocks{0};
     size_t total_blocks{0};
+    size_t num_waiting{0};
     double memory_utilization_ratio{0.0};
 };
 

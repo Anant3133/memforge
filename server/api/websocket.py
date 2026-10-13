@@ -1,36 +1,60 @@
 """
-WebSocket endpoint for real-time token streaming and live telemetry updates.
+WebSocket endpoints: live token streaming and an engine telemetry feed.
+
+`/ws/stream` streams real generated tokens from the engine. Each token carries
+its provenance (`source`: target / draft / resample / bonus) so the UI can colour
+draft-accepted tokens differently from target-corrected ones, plus a snapshot of
+engine metrics for the live gauges.
+
+`/ws/telemetry` is a prompt-independent feed of engine state for the dashboard,
+so the memory heatmap keeps updating even when this client is idle.
 """
 
-import json
+from __future__ import annotations
+
 import asyncio
-import time
+import json
+from typing import Any, Dict, List
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from memforge_ml.runtime.sampling import SamplingParams
+from server.config import SERVER_CONFIG
+from server.engine_manager import ENGINE_MANAGER
 
 router = APIRouter()
 
 
 class ConnectionManager:
-    def __init__(self):
-        self.active_connections: list[WebSocket] = []
+    def __init__(self) -> None:
+        self.active_connections: List[WebSocket] = []
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.append(websocket)
 
-    def disconnect(self, websocket: WebSocket):
+    def disconnect(self, websocket: WebSocket) -> None:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
 
-    async def broadcast_json(self, message: dict):
-        for connection in self.active_connections:
+    async def broadcast_json(self, message: Dict[str, Any]) -> None:
+        for connection in list(self.active_connections):
             try:
                 await connection.send_json(message)
             except Exception:
-                pass
+                self.disconnect(connection)
 
 
 manager = ConnectionManager()
+
+
+def _params_from(payload: Dict[str, Any]) -> SamplingParams:
+    return SamplingParams(
+        max_new_tokens=int(payload.get("max_new_tokens", SERVER_CONFIG.default_max_tokens)),
+        temperature=float(payload.get("temperature", 0.7)),
+        top_p=float(payload.get("top_p", 0.9)),
+        seed=payload.get("seed"),
+    )
 
 
 @router.websocket("/ws/stream")
@@ -38,62 +62,69 @@ async def websocket_stream_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            data_raw = await websocket.receive_text()
-            data = json.loads(data_raw)
-            prompt = data.get("prompt", "")
-            max_new_tokens = data.get("max_new_tokens", 64)
-            temperature = data.get("temperature", 0.7)
+            payload = json.loads(await websocket.receive_text())
+            prompt = (payload.get("prompt") or "").strip()
+            if not prompt:
+                await websocket.send_json({"type": "error", "message": "prompt is required"})
+                continue
 
-            # Simulated or real speculative streaming token-by-token
-            sample_words = prompt.split()
-            reply_words = [
-                ("MemForge", False),
-                ("allocates", True),
-                ("VRAM", True),
-                ("in", True),
-                ("16-token", False),
-                ("pages", True),
-                ("using", True),
-                ("PagedAttention,", True),
-                ("drastically", False),
-                ("reducing", True),
-                ("memory", True),
-                ("fragmentation", True),
-                ("and", False),
-                ("enabling", True),
-                ("continuous", True),
-                ("batching.", True),
-            ]
+            use_speculative = bool(payload.get("use_speculative", False))
+            params = _params_from(payload)
 
-            start_t = time.perf_counter()
-            for idx, (word, is_draft) in enumerate(reply_words[:max_new_tokens]):
-                await asyncio.sleep(0.06)  # simulate generation cadence
-                elapsed = time.perf_counter() - start_t
-                tps = (idx + 1) / elapsed if elapsed > 0 else 0.0
-
-                event = {
-                    "type": "token",
-                    "token": word + " ",
-                    "is_draft": is_draft,  # True = Green highlight (Draft), False = Blue highlight (Target)
-                    "index": idx,
-                    "metrics": {
-                        "tokens_per_second": round(tps, 2),
-                        "gpu_utilization_pct": 68.5,
-                        "allocated_blocks": 24 + idx,
-                        "free_blocks": 488 - idx,
-                        "acceptance_rate": 0.78,
-                    }
+            await websocket.send_json(
+                {
+                    "type": "start",
+                    "mode": "speculative" if use_speculative else "continuous_batching",
+                    "prompt": prompt,
+                    "max_new_tokens": params.max_new_tokens,
                 }
-                await websocket.send_json(event)
+            )
 
-            # Completion event
-            await websocket.send_json({
-                "type": "done",
-                "total_tokens": len(reply_words),
-                "total_time_ms": int((time.perf_counter() - start_t) * 1000),
-            })
+            try:
+                if use_speculative:
+                    source = ENGINE_MANAGER.speculative_stream(prompt, params)
+                else:
+                    source = ENGINE_MANAGER.stream(prompt, params)
+                async for event in source:
+                    await websocket.send_json(event)
+            except Exception as exc:
+                await websocket.send_json(
+                    {"type": "error", "message": f"{type(exc).__name__}: {exc}"}
+                )
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-    except Exception as e:
+    except Exception:
         manager.disconnect(websocket)
+
+
+@router.websocket("/ws/telemetry")
+async def websocket_telemetry_endpoint(websocket: WebSocket):
+    """Push engine telemetry and the block occupancy map a few times a second."""
+    await websocket.accept()
+    try:
+        while True:
+            if ENGINE_MANAGER.engine is not None:
+                occupancy = ENGINE_MANAGER.block_occupancy()
+                await websocket.send_json(
+                    {
+                        "type": "telemetry",
+                        "telemetry": ENGINE_MANAGER.engine.telemetry(),
+                        "last_step": ENGINE_MANAGER._last_report,
+                        "occupancy": occupancy,
+                    }
+                )
+            else:
+                await websocket.send_json(
+                    {
+                        "type": "telemetry",
+                        "telemetry": None,
+                        "ready": ENGINE_MANAGER.ready,
+                        "load_error": ENGINE_MANAGER.load_error,
+                    }
+                )
+            await asyncio.sleep(0.4)
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        return

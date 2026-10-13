@@ -40,6 +40,7 @@ public:
     // Prefill tracking
     bool has_completed_prefill() const { return has_completed_prefill_; }
     void mark_prefill_completed() { has_completed_prefill_ = true; }
+    void reset_prefill() { has_completed_prefill_ = false; }
 
 private:
     SequenceId id_;

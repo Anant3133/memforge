@@ -3,67 +3,123 @@ import { Zap, Cpu, Layers, Activity } from 'lucide-react';
 
 interface MetricsProps {
   tokensPerSec: number;
-  acceptanceRate: number;
-  gpuUtilization: number;
+  /** Draft acceptance rate, or null when the last run was not speculative. */
+  acceptanceRate: number | null;
+  /** Fraction of the physical block pool currently handed out (0..1). */
+  memoryUtilization: number;
+  /** Mean tokens confirmed per model forward pass -- the batching payoff. */
+  tokensPerForwardPass: number;
   allocatedBlocks: number;
-  freeBlocks: number;
+  totalBlocks: number;
+  blockSize: number;
+  runningSequences: number;
+  waitingSequences: number;
+}
+
+const card: React.CSSProperties = { padding: '20px' };
+const label: React.CSSProperties = {
+  color: 'var(--text-secondary)',
+  fontSize: '0.85rem',
+  fontWeight: 600,
+};
+const header: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: '8px',
+};
+const footnote: React.CSSProperties = {
+  fontSize: '0.75rem',
+  color: 'var(--text-muted)',
+  marginTop: '4px',
+};
+
+function value(color: string): React.CSSProperties {
+  return {
+    fontSize: '1.8rem',
+    fontWeight: 800,
+    color,
+    fontFamily: 'var(--font-mono)',
+  };
 }
 
 export const TelemetryMetrics: React.FC<MetricsProps> = ({
   tokensPerSec,
   acceptanceRate,
-  gpuUtilization,
+  memoryUtilization,
+  tokensPerForwardPass,
   allocatedBlocks,
-  freeBlocks,
+  totalBlocks,
+  blockSize,
+  runningSequences,
+  waitingSequences,
 }) => {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-      {/* Tokens / Sec */}
-      <div className="glass-card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 600 }}>THROUGHPUT</span>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '16px',
+        marginBottom: '24px',
+      }}
+    >
+      <div className="glass-card" style={card}>
+        <div style={header}>
+          <span style={label}>THROUGHPUT</span>
           <Zap size={18} color="var(--accent-emerald)" />
         </div>
-        <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--accent-emerald)', fontFamily: 'var(--font-mono)' }}>
-          {tokensPerSec.toFixed(1)} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>tok/s</span>
+        <div style={value('var(--accent-emerald)')}>
+          {tokensPerSec.toFixed(1)}{' '}
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>tok/s</span>
         </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Continuous Batching active</div>
+        <div style={footnote}>
+          {runningSequences} running
+          {waitingSequences > 0 ? `, ${waitingSequences} queued` : ''}
+        </div>
       </div>
 
-      {/* Acceptance Rate */}
-      <div className="glass-card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 600 }}>DRAFT ACCEPTANCE</span>
-          <Activity size={18} color="var(--accent-cyan)" />
-        </div>
-        <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>
-          {(acceptanceRate * 100).toFixed(0)}%
-        </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Rejection sampling verified</div>
-      </div>
-
-      {/* VRAM / Block Allocation */}
-      <div className="glass-card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 600 }}>PAGED KV BLOCKS</span>
-          <Layers size={18} color="var(--accent-purple)" />
-        </div>
-        <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--accent-purple)', fontFamily: 'var(--font-mono)' }}>
-          {allocatedBlocks} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ {allocatedBlocks + freeBlocks}</span>
-        </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>16 tokens / block (0% frag)</div>
-      </div>
-
-      {/* Hardware Utilization */}
-      <div className="glass-card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 600 }}>GPU SATURATION</span>
+      <div className="glass-card" style={card}>
+        <div style={header}>
+          <span style={label}>TOKENS / FORWARD PASS</span>
           <Cpu size={18} color="var(--accent-amber)" />
         </div>
-        <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--accent-amber)', fontFamily: 'var(--font-mono)' }}>
-          {gpuUtilization.toFixed(1)}%
+        <div style={value('var(--accent-amber)')}>{tokensPerForwardPass.toFixed(2)}</div>
+        <div style={footnote}>
+          {tokensPerForwardPass > 1 ? 'Batched across sequences' : 'Single sequence'}
         </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Zero idle bubbles</div>
+      </div>
+
+      <div className="glass-card" style={card}>
+        <div style={header}>
+          <span style={label}>PAGED KV BLOCKS</span>
+          <Layers size={18} color="var(--accent-purple)" />
+        </div>
+        <div style={value('var(--accent-purple)')}>
+          {allocatedBlocks}{' '}
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ {totalBlocks}</span>
+        </div>
+        <div style={footnote}>
+          {blockSize} tokens/block &middot; {(memoryUtilization * 100).toFixed(1)}% in use
+        </div>
+      </div>
+
+      <div className="glass-card" style={card}>
+        <div style={header}>
+          <span style={label}>DRAFT ACCEPTANCE</span>
+          <Activity size={18} color="var(--accent-cyan)" />
+        </div>
+        <div style={value('var(--accent-cyan)')}>
+          {acceptanceRate === null ? (
+            <span style={{ fontSize: '1.1rem', color: 'var(--text-muted)' }}>not speculative</span>
+          ) : (
+            `${(acceptanceRate * 100).toFixed(0)}%`
+          )}
+        </div>
+        <div style={footnote}>
+          {acceptanceRate === null
+            ? 'Enable speculation to measure'
+            : 'Rejection sampling keeps output lossless'}
+        </div>
       </div>
     </div>
   );

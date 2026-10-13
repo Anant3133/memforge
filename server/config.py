@@ -1,12 +1,62 @@
-from pydantic import BaseModel
+"""Server + engine configuration. Every field can be overridden by an env var."""
+
+import os
+
+from pydantic import BaseModel, ConfigDict
+
+
+def _env_str(name: str, default: str) -> str:
+    return os.environ.get(name, default)
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
 
 class ServerConfig(BaseModel):
-    host: str = "0.0.0.0"
-    port: int = 8000
-    reload: bool = False
-    model_name: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    draft_model_name: str = "HuggingFaceTB/SmolLM-135M"
-    enable_speculative: bool = True
-    max_concurrency: int = 32
+    # `model_` is a protected prefix in pydantic v2; we use target_/draft_ instead.
+    model_config = ConfigDict(protected_namespaces=())
+
+    host: str = _env_str("MEMFORGE_HOST", "127.0.0.1")
+    port: int = _env_int("MEMFORGE_PORT", 8000)
+    reload: bool = _env_bool("MEMFORGE_RELOAD", False)
+
+    # Models. Defaults are small enough to run on CPU; both share one tokenizer,
+    # which speculative decoding requires.
+    target_model: str = _env_str("MEMFORGE_TARGET_MODEL", "HuggingFaceTB/SmolLM2-360M-Instruct")
+    draft_model: str = _env_str("MEMFORGE_DRAFT_MODEL", "HuggingFaceTB/SmolLM2-135M-Instruct")
+
+    # Engine
+    block_size: int = _env_int("MEMFORGE_BLOCK_SIZE", 16)
+    kv_budget_mb: float = _env_float("MEMFORGE_KV_BUDGET_MB", 384.0)
+    max_num_seqs: int = _env_int("MEMFORGE_MAX_NUM_SEQS", 8)
+    max_model_len: int = _env_int("MEMFORGE_MAX_MODEL_LEN", 1024)
+    lookahead_k: int = _env_int("MEMFORGE_LOOKAHEAD_K", 4)
+    batched_decode: bool = _env_bool("MEMFORGE_BATCHED_DECODE", True)
+
+    # Toggles. Loading the draft model costs extra memory, so it is opt-out.
+    load_draft_model: bool = _env_bool("MEMFORGE_LOAD_DRAFT", True)
+    eager_load: bool = _env_bool("MEMFORGE_EAGER_LOAD", True)
+
+    max_concurrency: int = _env_int("MEMFORGE_MAX_CONCURRENCY", 32)
+    default_max_tokens: int = _env_int("MEMFORGE_DEFAULT_MAX_TOKENS", 96)
+
 
 SERVER_CONFIG = ServerConfig()

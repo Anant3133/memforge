@@ -38,6 +38,9 @@ PYBIND11_MODULE(memforge_c, m) {
         .def(py::init<>())
         .def_readwrite("running_sequences", &SchedulerStepResult::running_sequences)
         .def_readwrite("finished_sequence_ids", &SchedulerStepResult::finished_sequence_ids)
+        .def_readwrite("preempted_sequence_ids", &SchedulerStepResult::preempted_sequence_ids)
+        .def_readwrite("aborted_sequence_ids", &SchedulerStepResult::aborted_sequence_ids)
+        .def_readwrite("num_waiting", &SchedulerStepResult::num_waiting)
         .def_readwrite("num_free_blocks", &SchedulerStepResult::num_free_blocks)
         .def_readwrite("total_blocks", &SchedulerStepResult::total_blocks)
         .def_readwrite("memory_utilization_ratio", &SchedulerStepResult::memory_utilization_ratio);
@@ -65,6 +68,9 @@ PYBIND11_MODULE(memforge_c, m) {
         .def("get_total_len", &Sequence::get_total_len)
         .def("get_block_table", &Sequence::get_block_table)
         .def("append_token", &Sequence::append_token)
+        .def("get_num_required_blocks", &Sequence::get_num_required_blocks)
+        .def("has_completed_prefill", &Sequence::has_completed_prefill)
+        .def("reset_prefill", &Sequence::reset_prefill)
         .def("is_finished", &Sequence::is_finished)
         .def("finish", &Sequence::finish);
 
@@ -80,6 +86,8 @@ PYBIND11_MODULE(memforge_c, m) {
         .def("get_num_allocated_blocks", &BlockAllocator::get_num_allocated_blocks)
         .def("get_total_blocks", &BlockAllocator::get_total_blocks)
         .def("get_block_size", &BlockAllocator::get_block_size)
+        .def("free_sequence", &BlockAllocator::free_sequence)
+        .def("ensure_capacity", &BlockAllocator::ensure_capacity)
         .def("get_utilization_ratio", &BlockAllocator::get_utilization_ratio)
         .def("reset", &BlockAllocator::reset);
 
@@ -94,5 +102,6 @@ PYBIND11_MODULE(memforge_c, m) {
         .def("get_num_running", &Scheduler::get_num_running)
         .def("get_num_finished", &Scheduler::get_num_finished)
         .def("has_unfinished_sequences", &Scheduler::has_unfinished_sequences)
-        .def("get_sequence", &Scheduler::get_sequence);
+        .def("get_sequence", &Scheduler::get_sequence)
+        .def("get_allocator", &Scheduler::get_allocator);
 }

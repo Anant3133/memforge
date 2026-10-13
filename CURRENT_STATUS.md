@@ -4,7 +4,10 @@
 
 ## 1. Executive Summary & Current Repository Status
 
-The MemForge repository has been initialized with the core architectural scaffolding across low-level C++ systems memory management, Python/PyTorch machine learning serving, FastAPI asynchronous middleware, and a React telemetry frontend.
+MemForge is a working LLM inference engine. The C++ paged memory allocator and
+continuous-batching scheduler, the PyTorch execution layer, the FastAPI server and
+the React telemetry dashboard are implemented **and connected**, serving real model
+weights end to end. Section 3 records what is measured rather than claimed.
 
 ```mermaid
 graph TD
@@ -17,15 +20,24 @@ graph TD
         C6["Automated C++ Unit Test Verification (100% Pass)"]
     end
 
-    subgraph S2["Next Milestone (Phase 1 Completion -> Phase 2)"]
-        N1["Build Native pybind11 Extension (.pyd/.so)"]
-        N2["Execute Baseline Benchmarks on Target/Draft Models"]
-        N3["Integrate PagedAttention into PyTorch Forward Pass"]
-        N4["Wire Live Server Async Request Queue to C++ Scheduler"]
-        N5["Connect Frontend to Live WebSocket Telemetry"]
+    subgraph S2["Completed in the Live Runtime Phase (2026-10-13)"]
+        N1["Native pybind11 Extension Built & Verified"]
+        N2["PagedAttention in a Real Forward Pass (bit-exact)"]
+        N3["Continuous Batching on Real Weights (3.32x at N=8)"]
+        N4["Speculative Decoding Verified Lossless"]
+        N5["Server & Frontend on Live Telemetry"]
+        N6["2 Scheduler Bugs Fixed (block leak, queue block)"]
     end
 
-    S1 --> S2
+    subgraph S3["Next Phases (see PROGRESS_AND_NEXT_PHASES.md)"]
+        P1["A: Fused paged-attention kernel"]
+        P2["B: Prefix sharing (copy-on-write)"]
+        P3["C: Chunked prefill"]
+        P4["D: Speculation inside continuous batching"]
+        P5["E: GPU execution path"]
+    end
+
+    S1 --> S2 --> S3
 ```
 
 ---
@@ -69,115 +81,92 @@ graph TD
 
 ### 2.5 Unified Master Pipeline (Scripts)
 - **Completed**:
-  - `scripts/run_pipeline.py` & `scripts/run_pipeline.ps1`: Single-command pipeline runner orchestrating all 6 testing and benchmarking stages with rich stylized terminal dashboard reporting.
+  - `scripts/run_pipeline.py` & `scripts/run_pipeline.ps1`: Single-command pipeline runner orchestrating all 7 testing and benchmarking stages with rich stylized terminal dashboard reporting.
+  - `scripts/cpp_test_runner.py`: Builds the C++ tests with g++, falling back to MSVC when the local linker is broken.
   - **Live Verification Results**:
     - **Stage 1 (C++ Unit Tests)**: PASSED (BlockAllocator & Continuous Batching Scheduler).
     - **Stage 2 (Native pybind11 Bridge)**: PASSED (`memforge_c` binary extension loaded in Python with 4,096 tokens capacity).
-    - **Stage 3 (Pytest Suite)**: PASSED (7 tests covering statistical rejection sampling, Paged KV Cache read/write, and FastAPI REST endpoints).
-    - **Stage 4 (Paged KV Cache Benchmark)**: PASSED (6.86M blocks/sec allocation speed, 0.0% memory fragmentation).
-    - **Stage 5 (Continuous Batching Benchmark)**: PASSED (2.67x compute throughput speedup over static batching).
-    - **Stage 6 (Speculative Decoding Benchmark)**: PASSED (Lossless target distribution preservation verified).
+    - **Stage 3 (Pytest Suite)**: PASSED (78 tests covering the KV pool, paged-cache equivalence, the continuous engine, the speculative runtime, the C++ bridge and the API).
+    - **Stage 4 (Paged KV Cache Microbenchmark)**: PASSED (~14M block allocations/sec, zero external fragmentation). *Allocator microbenchmark, not end-to-end inference.*
+    - **Stage 5 (Continuous Batching Simulation)**: PASSED (2.67x step-count reduction vs static batching). *Analytical model; the measured end-to-end figure is 3.32x — see Stage 7 and section 3.2.*
+    - **Stage 6 (Rejection Sampling Simulation)**: PASSED (lossless target distribution preserved over synthetic distributions).
+    - **Stage 7 (Live Engine End-to-End)**: PASSED (3 concurrent requests on real weights, 2.77 tokens per forward pass, all physical blocks reclaimed).
 
 ---
 
-## 3. What We Are Doing Next (Immediate Next Milestones)
+## 3. Live Runtime Phase (completed 2026-10-13)
 
-```mermaid
-gantt
-    title Immediate Next Execution Steps
-    dateFormat  YYYY-MM-DD
-    section Systems Track
-    Compile native pybind11 extension (`pip install -e .`) :a1, 2026-09-01, 3d
-    Thread safety & memory block row-level locking          :a2, after a1, 4d
-    section ML Track
-    Run baseline benchmark on target & draft models         :b1, 2026-09-01, 3d
-    Hook PagedAttention into model forward pass             :b2, after b1, 5d
-    section API & UI Track
-    Connect live FastAPI request queue to C++ scheduler     :c1, 2026-09-01, 4d
-    Run frontend locally & connect to WebSocket backend     :c2, after c1, 3d
-```
+The subsystems above are now **connected and running on real model weights**. See
+[PROGRESS_AND_NEXT_PHASES.md](PROGRESS_AND_NEXT_PHASES.md) for the full report,
+measured results, known limitations and the next phases.
 
-### 3.1 Step 1: Compile the Native C++ `pybind11` Extension
-- **Objective**: Build `memforge_c.pyd` (Windows) / `memforge_c.so` (Linux/macOS) so Python code directly executes the high-performance C++ `BlockAllocator` and `Scheduler`.
-- **Target**: Run `pip install -e .` or `python setup.py build_ext --inplace`.
+### 3.1 What is now real rather than scaffolded
 
-### 3.2 Step 2: Establish Phase 1 Baseline Performance Benchmarks
-- **Objective**: Run `benchmarks/run_baseline.py` to record baseline numbers for:
-  1. Target Model Throughput (Tokens/sec)
-  2. Time-To-First-Token (TTFT)
-  3. Peak VRAM / Memory Utilization
-- **Target**: Establish standard baseline against which Continuous Batching and Speculative Decoding speedups will be quantitatively measured.
+- `memforge_ml/runtime/paged_cache.py` — `PagedCache` implements the
+  `transformers.Cache` interface, so an unmodified Hugging Face model's forward
+  pass reads and writes its KV cache through C++-allocated 16-token blocks.
+  Verified **bit-exact** against the stock contiguous `DynamicCache`.
+- `memforge_ml/runtime/continuous_engine.py` — generation driven by the C++
+  scheduler one token step at a time, with a batched decode path.
+- `memforge_ml/runtime/speculative_runtime.py` — draft proposal, single-pass
+  target verification, rejection sampling, and O(1) cache rollback.
+- `server/engine_manager.py` — one background task steps the engine; concurrent
+  HTTP and WebSocket clients share it, so requests are genuinely interleaved.
+- The WebSocket endpoint streams **real tokens with real telemetry**. It
+  previously streamed a hardcoded list of words with invented metrics.
 
-### 3.3 Step 3: Integrate `PagedAttention` into Model Layer
-- **Objective**: Replace standard PyTorch contiguous KV cache tensor allocations with `PagedKVCache` in the attention forward pass, gathering $K, V$ tensors via C++ block tables.
-- **Target**: Run `benchmarks/run_paged_kv.py` to verify zero memory fragmentation.
+### 3.2 Measured results (CPU-only, SmolLM2-360M target / 135M draft)
 
-### 3.4 Step 4: Wire Continuous Batching Request Queue in FastAPI
-- **Objective**: Connect `server/queues/request_queue.py` to the C++ `Scheduler` so multiple concurrent HTTP requests are dynamically interleaved at the single-token step level.
-- **Target**: Verify with multi-request concurrent test script.
+| Claim | Status |
+| :--- | :--- |
+| Paged KV output == contiguous KV output | **Verified**, max abs logit difference 0.0 |
+| Continuous batching speedup | **3.32x** at 8 concurrent requests (6.29 tokens/forward pass) |
+| Paging throughput overhead | **0.98x**, i.e. break-even (median of 5 interleaved runs) |
+| Concurrency per byte of KV memory vs contiguous reservation | **8.3x** |
+| Speculative decoding is lossless | **Verified** — greedy speculative == greedy target, exactly |
+| Speculative decoding 2-3x speedup | **Not demonstrated.** 0.58x on this CPU/model pair; see the report for why |
+| Physical block leaks | **None** across every scenario; free + allocated == total |
 
-### 3.5 Step 5: Live UI Telemetry Connection
-- **Objective**: Run `npm install` and `npm run dev` in `frontend/`, verify real-time WebSocket connection to `server/app.py`, and validate live metric graphs.
+### 3.3 Bugs fixed in the C++ core
 
----
+- **Memory-pressure preemption leaked blocks and stranded sequences.** A sequence
+  that failed `ensure_capacity()` was marked `SWAPPED`, dropped from the running
+  queue, never re-queued and never freed. Now preempted by recomputation: blocks
+  released, sequence re-queued at the head, output verified identical.
+- **An impossible request blocked the queue forever.** A request larger than the
+  whole pool is now aborted instead of head-of-line blocking everything behind it.
 
-## 4. Step-by-Step Implementation Plan
+### 3.4 Test suite
 
-### Step 1: Environment & C++ Extension Compilation
-```bash
-# 1. Install python dependencies
-pip install -r requirements.txt
+**78 Python tests passing in ~8 seconds** (previously 7), covering the KV pool,
+paged cache equivalence, the continuous engine, the speculative runtime, the C++
+bridge, and the API. All 7 pipeline stages pass via `python scripts/run_pipeline.py`.
 
-# 2. Build C++ pybind11 extension in-place
-python setup.py build_ext --inplace
-
-# 3. Verify Python can import C++ engine
-python -c "import memforge_c; alloc = memforge_c.BlockAllocator(128, 16); print('C++ Allocator initialized! Free blocks:', alloc.get_num_free_blocks())"
-```
-
-### Step 2: Run Automated Test Suite
-```bash
-# Run pytest for PyTorch attention, rejection sampling, and FastAPI routes
-pytest -v
-```
-
-### Step 3: Run Baseline & Optimization Benchmarks
-```bash
-# 1. Measure raw baseline
-python benchmarks/run_baseline.py --tokens 64
-
-# 2. Measure Paged KV-Cache allocation throughput
-python benchmarks/run_paged_kv.py
-
-# 3. Measure Continuous Batching GPU bubble reduction
-python benchmarks/run_continuous_batching.py
-
-# 4. Measure Speculative Decoding speedup
-python benchmarks/run_speculative.py --tokens 64
-```
-
-### Step 4: Launch Full Engine Server & UI
-```bash
-# Terminal 1: Launch FastAPI Backend Server
-uvicorn server.app:app --host 127.0.0.1 --port 8000 --reload
-
-# Terminal 2: Launch React Telemetry Dashboard
-cd frontend
-npm install
-npm run dev
-```
+> Note: the g++ linker in this environment is broken (`ld returned 116`, zero-byte
+> output) and fails identically on the pre-existing committed sources, so it is not
+> a regression. `scripts/cpp_test_runner.py` now falls back to MSVC, under which
+> both C++ suites pass.
 
 ---
 
-## 5. Definition of Done for Current Milestone
+## 4. Definition of Done for this milestone
 
-- [x] C++ Core Headers and Source implemented (`types.hpp`, `sequence.cpp`, `block_allocator.cpp`, `scheduler.cpp`, `bindings.cpp`).
-- [x] C++ Unit Tests compiled and passing (`test_block_allocator`, `test_scheduler`).
-- [x] PyTorch ML modules scaffolded (`naive_runner.py`, `paged_attention.py`, `rejection_sampler.py`, `spec_engine.py`).
-- [x] FastAPI REST & WebSocket streaming server written.
-- [x] React Telemetry Dashboard with glassmorphism UI components created.
-- [x] Benchmark suite ready for performance evaluation.
-- [ ] Python dependencies installed in local environment (`pip install -r requirements.txt`).
-- [ ] Native `pybind11` extension built and verified (`pip install -e .`).
-- [ ] Baseline metrics recorded in tracking table.
-- [ ] Frontend dev server running and connected to live backend WebSocket.
+- [x] C++ core headers and sources implemented
+- [x] C++ unit tests compiling and passing (via the MSVC fallback)
+- [x] Python dependencies installed in the local virtualenv
+- [x] Native `pybind11` extension built and verified
+- [x] PagedAttention integrated into a real model forward pass, verified bit-exact
+- [x] Continuous batching driven by the C++ scheduler, speedup measured
+- [x] Speculative decoding verified lossless against greedy target decoding
+- [x] FastAPI server serving real generation; concurrent requests interleaved
+- [x] WebSocket streaming real tokens and real telemetry
+- [x] Frontend wired to live endpoints; typecheck and production build green
+- [x] Baseline and optimization metrics recorded in `benchmarks/results/live_engine.json`
+- [ ] Fused paged-attention kernel (Phase A)
+- [ ] Prefix sharing via copy-on-write (Phase B)
+- [ ] Chunked prefill (Phase C)
+- [ ] Speculative decoding inside continuous batching (Phase D)
+- [ ] GPU execution path exercised (Phase E)
+
+Next phases are specified with definitions of done in
+[PROGRESS_AND_NEXT_PHASES.md](PROGRESS_AND_NEXT_PHASES.md#8-next-phases).

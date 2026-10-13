@@ -73,55 +73,50 @@ def print_banner():
 
 
 def run_stage_1_cpp_unit_tests() -> tuple[bool, float, str]:
+    """
+    Build and run the C++ unit tests.
+
+    Toolchain selection is delegated to scripts/cpp_test_runner.py, which tries
+    g++ and falls back to MSVC. A broken local linker then shows up as an
+    environment problem instead of masquerading as a code failure.
+    """
     console.rule("[bold cyan]Stage 1: C++ Core Engine Unit Tests[/bold cyan]")
     start = time.perf_counter()
 
-    # Test 1: Block Allocator
-    console.print("[dim]Compiling & running BlockAllocator test...[/dim]")
-    compile_cmd1 = (
-        f"g++ -std=c++17 -I engine/include tests/cpp/test_block_allocator.cpp "
-        f"engine/src/block_allocator.cpp engine/src/sequence.cpp -o test_block_allocator.exe"
-    )
-    res1 = subprocess.run(compile_cmd1, shell=True, cwd=PROJECT_ROOT, capture_output=True, text=True)
-    if res1.returncode != 0:
-        console.print(f"  {TAG_ERR} Compilation failed for test_block_allocator:\n{res1.stderr}")
-        return False, time.perf_counter() - start, "C++ BlockAllocator compile failed"
+    from scripts.cpp_test_runner import CPP_TEST_SUITES, build_and_run
 
-    run_res1 = subprocess.run(".\\test_block_allocator.exe", shell=True, cwd=PROJECT_ROOT, capture_output=True, text=True)
-    if run_res1.returncode != 0:
-        console.print(f"  {TAG_ERR} Execution failed for test_block_allocator:\n{run_res1.stderr}")
-        return False, time.perf_counter() - start, "C++ BlockAllocator test assertion failed"
+    labels = {
+        "test_block_allocator": "BlockAllocator (Physical Memory Pool & Boundary Growth)",
+        "test_scheduler": "Scheduler (Continuous Batching Iteration Loop)",
+    }
 
-    console.print(f"  {TAG_OK} BlockAllocator (Physical Memory Pool & Boundary Growth) passed.")
+    toolchains = set()
+    for suite, sources in CPP_TEST_SUITES.items():
+        console.print(f"[dim]Building & running {suite}...[/dim]")
+        result = build_and_run(suite, sources)
 
-    # Test 2: Continuous Scheduler
-    console.print("[dim]Compiling & running Scheduler test...[/dim]")
-    compile_cmd2 = (
-        f"g++ -std=c++17 -I engine/include tests/cpp/test_scheduler.cpp "
-        f"engine/src/scheduler.cpp engine/src/block_allocator.cpp engine/src/sequence.cpp -o test_scheduler.exe"
-    )
-    res2 = subprocess.run(compile_cmd2, shell=True, cwd=PROJECT_ROOT, capture_output=True, text=True)
-    if res2.returncode != 0:
-        console.print(f"  {TAG_ERR} Compilation failed for test_scheduler:\n{res2.stderr}")
-        return False, time.perf_counter() - start, "C++ Scheduler compile failed"
+        if not result.ok:
+            if result.toolchain == "none":
+                console.print(
+                    f"  [bold yellow][SKIP][/bold yellow] {labels.get(suite, suite)}: "
+                    f"{result.detail}."
+                )
+                console.print(
+                    "  [dim]The same C++ allocator and scheduler are covered through the "
+                    "pybind11 bridge in Stage 3 (tests/python/test_scheduler_bridge.py).[/dim]"
+                )
+                return True, time.perf_counter() - start, f"Skipped ({result.detail})"
 
-    run_res2 = subprocess.run(".\\test_scheduler.exe", shell=True, cwd=PROJECT_ROOT, capture_output=True, text=True)
-    if run_res2.returncode != 0:
-        console.print(f"  {TAG_ERR} Execution failed for test_scheduler:\n{run_res2.stderr}")
-        return False, time.perf_counter() - start, "C++ Scheduler test assertion failed"
+            console.print(f"  {TAG_ERR} {labels.get(suite, suite)} failed ({result.detail}):")
+            console.print(f"  [dim]{result.output.strip()[:1500]}[/dim]")
+            return False, time.perf_counter() - start, f"{suite}: {result.detail}"
 
-    console.print(f"  {TAG_OK} Scheduler (Continuous Batching Iteration Loop) passed.")
-
-    # Cleanup temp exes
-    for exe in ["test_block_allocator.exe", "test_scheduler.exe"]:
-        if os.path.exists(os.path.join(PROJECT_ROOT, exe)):
-            try:
-                os.remove(os.path.join(PROJECT_ROOT, exe))
-            except Exception:
-                pass
+        toolchains.add(result.toolchain)
+        console.print(f"  {TAG_OK} {labels.get(suite, suite)} passed.")
 
     elapsed = time.perf_counter() - start
-    return True, elapsed, "2 C++ Test Suites Passed"
+    used = "/".join(sorted(toolchains))
+    return True, elapsed, f"2 C++ Test Suites Passed ({used})"
 
 
 def run_stage_2_pybind_verification() -> tuple[bool, float, str]:
@@ -315,6 +310,120 @@ def run_stage_6_speculative_rejection_benchmark() -> tuple[bool, float, dict]:
     return True, elapsed, {"acceptance_rate": acceptance_rate, "speedup": theoretical_speedup}
 
 
+def run_stage_7_live_engine() -> tuple[bool, float, str]:
+    """
+    End-to-end check on real weights: concurrent requests through the live
+    continuous-batching engine over a paged KV cache.
+
+    Skips (without failing) when the model weights are not cached locally, so a
+    fresh checkout with no network still gets a green pipeline.
+    """
+    console.rule("[bold cyan]Stage 7: Live Engine End-to-End (real weights)[/bold cyan]")
+    start = time.perf_counter()
+
+    import os
+
+    model_name = os.environ.get(
+        "MEMFORGE_TARGET_MODEL", "HuggingFaceTB/SmolLM2-360M-Instruct"
+    )
+
+    try:
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+    except ImportError as exc:
+        console.print(f"  [bold yellow][SKIP][/bold yellow] transformers unavailable: {exc}")
+        return True, time.perf_counter() - start, "Skipped (transformers missing)"
+
+    try:
+        console.print(f"[dim]Loading {model_name} from the local cache...[/dim]")
+        tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, dtype=torch.float32, local_files_only=True
+        )
+        model.eval()
+    except Exception as exc:
+        console.print(
+            f"  [bold yellow][SKIP][/bold yellow] weights for '{model_name}' are not cached "
+            f"locally ({type(exc).__name__})."
+        )
+        console.print(
+            f"  [dim]Download it with: hf download {model_name}[/dim]"
+        )
+        return True, time.perf_counter() - start, "Skipped (weights not cached)"
+
+    from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine
+    from memforge_ml.runtime.sampling import SamplingParams
+
+    engine = ContinuousBatchingEngine(
+        model, tokenizer, block_size=16, kv_budget_mb=192.0,
+        max_num_seqs=4, max_model_len=512,
+    )
+    console.print(
+        f"  {TAG_OK} Paged KV pool: {engine.pool.describe()['total_mb']} MB, "
+        f"{engine.pool.num_blocks} blocks x {engine.block_size} tokens "
+        f"({engine.pool.capacity_tokens:,} token capacity)."
+    )
+
+    prompts = [
+        "Virtual memory lets an operating system",
+        "The main advantage of a paged cache is",
+        "GPUs are fast at matrix multiplication because",
+    ]
+    greedy = SamplingParams(max_new_tokens=24, temperature=0.0, top_p=1.0)
+
+    t0 = time.perf_counter()
+    results = engine.generate(prompts, greedy)
+    elapsed = time.perf_counter() - t0
+    engine.step()  # let the scheduler reclaim the last finished sequence
+
+    telemetry = engine.telemetry()
+    total_tokens = sum(r["generated_tokens"] for r in results)
+
+    table = Table(title="Live Engine: 3 Concurrent Requests", border_style="cyan")
+    table.add_column("Metric", style="bold yellow")
+    table.add_column("Value", style="bold green")
+    table.add_row("Model", model_name)
+    table.add_row("Requests served concurrently", str(len(results)))
+    table.add_row("Tokens generated", f"{total_tokens}")
+    table.add_row("Wall clock", f"{elapsed:.2f}s")
+    table.add_row("Aggregate throughput", f"{total_tokens / elapsed:.2f} tok/s")
+    table.add_row("Engine steps", f"{telemetry['steps']}")
+    table.add_row("Model forward passes", f"{telemetry['forward_passes']}")
+    table.add_row("Tokens per forward pass", f"{telemetry['tokens_per_forward_pass']}")
+    table.add_row("Preemptions", f"{telemetry['preemptions']}")
+    table.add_row(
+        "Blocks reclaimed after drain",
+        f"{telemetry['free_blocks']}/{telemetry['total_blocks']}",
+    )
+    console.print(table)
+
+    problems = []
+    for result in results:
+        if result["generated_tokens"] != 24:
+            problems.append(
+                f"seq {result['seq_id']} produced {result['generated_tokens']}/24 tokens"
+            )
+    if telemetry["free_blocks"] != telemetry["total_blocks"]:
+        problems.append("physical blocks were not fully reclaimed")
+    if telemetry["tokens_per_forward_pass"] <= 1.0:
+        problems.append("decode was not batched across sequences")
+
+    if problems:
+        for problem in problems:
+            console.print(f"  {TAG_ERR} {problem}")
+        return False, time.perf_counter() - start, "; ".join(problems)
+
+    console.print(
+        f"  {TAG_OK} Continuous batching confirmed "
+        f"{telemetry['tokens_per_forward_pass']} tokens per forward pass; "
+        f"all physical blocks reclaimed."
+    )
+    return (
+        True,
+        time.perf_counter() - start,
+        f"{telemetry['tokens_per_forward_pass']} tok/forward, 0 leaked blocks",
+    )
+
+
 def main():
     total_start = time.perf_counter()
     print_banner()
@@ -326,6 +435,7 @@ def main():
         ("Stage 4: Paged KV-Cache Benchmark", run_stage_4_paged_kv_benchmark),
         ("Stage 5: Continuous Batching Benchmark", run_stage_5_continuous_batching_benchmark),
         ("Stage 6: Speculative Decoding Benchmark", run_stage_6_speculative_rejection_benchmark),
+        ("Stage 7: Live Engine End-to-End", run_stage_7_live_engine),
     ]
 
     summary_results = []

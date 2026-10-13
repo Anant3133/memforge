@@ -1,12 +1,21 @@
 """
-FastAPI REST routes for MemForge server (OpenAI-compatible chat completions + telemetry).
+REST API for MemForge: OpenAI-compatible chat completions plus engine telemetry.
+
+Non-streaming completions go through the shared continuous-batching engine, so
+concurrent callers are interleaved token-by-token rather than served one at a
+time. `use_speculative` routes to the draft+target speculative runtime instead.
 """
 
 import time
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional
 
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field
+
+from memforge_ml.runtime.sampling import SamplingParams
+from server.config import SERVER_CONFIG
+from server.engine_manager import ENGINE_MANAGER
 
 router = APIRouter()
 
@@ -17,13 +26,16 @@ class ChatMessage(BaseModel):
 
 
 class ChatCompletionRequest(BaseModel):
-    model: str = "memforge-llama"
+    model_config = ConfigDict(protected_namespaces=(), populate_by_name=True)
+
+    model: str = "memforge-target"
     messages: List[ChatMessage]
-    max_tokens: Optional[int] = Field(default=128, alias="max_new_tokens")
+    max_tokens: Optional[int] = Field(default=None, alias="max_new_tokens")
     temperature: float = 0.7
     top_p: float = 0.9
+    seed: Optional[int] = None
     stream: bool = False
-    use_speculative: bool = True
+    use_speculative: bool = False
 
 
 class ChatCompletionChoice(BaseModel):
@@ -39,6 +51,8 @@ class UsageInfo(BaseModel):
 
 
 class ChatCompletionResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     id: str
     object: str = "chat.completion"
     created: int
@@ -48,95 +62,222 @@ class ChatCompletionResponse(BaseModel):
     memforge_telemetry: Optional[Dict[str, Any]] = None
 
 
+class CompletionRequest(BaseModel):
+    prompt: str
+    max_tokens: int = Field(default=64, ge=1)
+    temperature: float = 0.7
+    top_p: float = 0.9
+    seed: Optional[int] = None
+    use_speculative: bool = False
+
+
+def _build_prompt(messages: List[ChatMessage]) -> str:
+    """Render chat messages with the model's own chat template when it has one."""
+    tokenizer = ENGINE_MANAGER.tokenizer
+    payload = [{"role": m.role, "content": m.content} for m in messages]
+    if tokenizer is not None and getattr(tokenizer, "chat_template", None):
+        try:
+            return tokenizer.apply_chat_template(
+                payload, tokenize=False, add_generation_prompt=True
+            )
+        except Exception:
+            pass
+    rendered = "\n".join(f"{m.role}: {m.content}" for m in messages)
+    return f"{rendered}\nassistant:"
+
+
+def _sampling(
+    max_tokens: Optional[int], temperature: float, top_p: float, seed: Optional[int]
+) -> SamplingParams:
+    return SamplingParams(
+        max_new_tokens=max_tokens or SERVER_CONFIG.default_max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        seed=seed,
+    )
+
+
 @router.get("/v1/health")
 async def health_check():
     return {
-        "status": "healthy",
+        "status": "healthy" if ENGINE_MANAGER.load_error is None else "degraded",
         "service": "MemForge LLM Inference Engine",
+        "engine_ready": ENGINE_MANAGER.ready,
+        "speculative_available": ENGINE_MANAGER.spec_engine is not None,
+        "load_error": ENGINE_MANAGER.load_error,
         "timestamp": time.time(),
     }
 
 
 @router.get("/v1/models")
-async def list_models(request: Request):
-    app_state = request.app.state
-    return {
-        "object": "list",
-        "data": [
-            {
-                "id": "memforge-target-model",
-                "object": "model",
-                "created": int(time.time()),
-                "owned_by": "memforge",
-            },
+async def list_models():
+    cfg = SERVER_CONFIG
+    created = int(time.time())
+    data = [
+        {
+            "id": "memforge-target",
+            "object": "model",
+            "created": created,
+            "owned_by": "memforge",
+            "backing_model": cfg.target_model,
+        }
+    ]
+    if ENGINE_MANAGER.spec_engine is not None:
+        data.append(
             {
                 "id": "memforge-speculative",
                 "object": "model",
-                "created": int(time.time()),
+                "created": created,
                 "owned_by": "memforge",
+                "backing_model": f"{cfg.target_model} + draft {cfg.draft_model}",
             }
-        ]
+        )
+    return {"object": "list", "data": data}
+
+
+@router.get("/v1/engine/status")
+async def engine_status():
+    """Full engine configuration, KV pool geometry and cumulative telemetry."""
+    return ENGINE_MANAGER.status()
+
+
+@router.get("/v1/engine/telemetry")
+async def engine_telemetry():
+    if ENGINE_MANAGER.engine is None:
+        raise HTTPException(status_code=503, detail="engine not loaded yet")
+    return ENGINE_MANAGER.engine.telemetry()
+
+
+@router.get("/v1/engine/blocks")
+async def engine_blocks():
+    """
+    Physical block ownership map for the memory heatmap: index -> owning
+    sequence id, 0 meaning free.
+    """
+    if ENGINE_MANAGER.engine is None:
+        raise HTTPException(status_code=503, detail="engine not loaded yet")
+    occupancy = ENGINE_MANAGER.block_occupancy()
+    return {
+        "block_size": ENGINE_MANAGER.engine.block_size,
+        "total_blocks": len(occupancy),
+        "allocated_blocks": sum(1 for owner in occupancy if owner),
+        "occupancy": occupancy,
     }
 
 
-@router.post("/v1/chat/completions", response_model=ChatCompletionResponse)
-async def create_chat_completion(req: ChatCompletionRequest, request: Request):
-    app_state = request.app.state
+@router.post("/v1/completions")
+async def create_completion(req: CompletionRequest):
+    """Minimal raw-prompt completion endpoint (no chat template applied)."""
+    params = _sampling(req.max_tokens, req.temperature, req.top_p, req.seed)
+    try:
+        if req.use_speculative:
+            result = await ENGINE_MANAGER.speculative_generate(req.prompt, params)
+        else:
+            result = await ENGINE_MANAGER.generate(req.prompt, params)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return result
 
-    # Format user prompt
-    prompt = "\n".join([f"{m.role}: {m.content}" for m in req.messages]) + "\nassistant:"
 
-    # If speculative engine is available in app_state
-    if hasattr(app_state, "spec_engine") and req.use_speculative:
-        res = app_state.spec_engine.generate(
-            prompt,
-            max_new_tokens=req.max_tokens or 128,
-            temperature=req.temperature,
+@router.post("/v1/chat/completions")
+async def create_chat_completion(req: ChatCompletionRequest):
+    prompt = _build_prompt(req.messages)
+    params = _sampling(req.max_tokens, req.temperature, req.top_p, req.seed)
+
+    if req.stream:
+        return StreamingResponse(
+            _sse_stream(prompt, params, req),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
-        generated_text = res["generated_text"]
-        num_tokens = res["num_generated_tokens"]
-        telemetry = {
-            "tokens_per_second": res["tokens_per_second"],
-            "acceptance_rate": res["acceptance_rate"],
-            "total_drafted": res["total_drafted_tokens"],
-            "total_accepted": res["total_accepted_tokens"],
-            "token_origins": res.get("token_origins", []),
-        }
-    else:
-        # Fallback to naive runner or mock
-        if hasattr(app_state, "naive_runner"):
-            res = app_state.naive_runner.generate(
-                prompt,
-                max_new_tokens=req.max_tokens or 128,
-                temperature=req.temperature,
-            )
-            generated_text = res["generated_text"]
-            num_tokens = res["num_generated_tokens"]
+
+    try:
+        if req.use_speculative:
+            result = await ENGINE_MANAGER.speculative_generate(prompt, params)
             telemetry = {
-                "tokens_per_second": res["tokens_per_second"],
-                "time_to_first_token_ms": res["time_to_first_token_seconds"] * 1000,
+                "mode": "speculative",
+                "tokens_per_second": result["tokens_per_second"],
+                "time_to_first_token_ms": result["time_to_first_token_ms"],
+                "acceptance_rate": result["acceptance_rate"],
+                "drafted_tokens": result["drafted_tokens"],
+                "accepted_tokens": result["accepted_tokens"],
+                "target_forward_passes": result["target_forward_passes"],
+                "tokens_per_target_pass": result["tokens_per_target_pass"],
+                "rolled_back_tokens": result["rolled_back_tokens"],
+                "token_sources": result["token_sources"],
             }
         else:
-            # Fallback mock for offline scaffolding
-            generated_text = "MemForge engine processed your request successfully using PagedAttention."
-            num_tokens = 12
-            telemetry = {"tokens_per_second": 45.2, "mock": True}
+            result = await ENGINE_MANAGER.generate(prompt, params)
+            telemetry = {
+                "mode": "continuous_batching",
+                "tokens_per_second": result["tokens_per_second"],
+                "time_to_first_token_ms": result["time_to_first_token_ms"],
+                "num_preemptions": result["num_preemptions"],
+                "engine": ENGINE_MANAGER.live_metrics(),
+            }
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
+    completion_tokens = result["generated_tokens"]
+    prompt_tokens = result.get("prompt_tokens", 0)
     return ChatCompletionResponse(
-        id=f"chatcmpl-{int(time.time()*1000)}",
+        id=f"chatcmpl-{int(time.time() * 1000)}",
         created=int(time.time()),
         model=req.model,
         choices=[
             ChatCompletionChoice(
                 index=0,
-                message=ChatMessage(role="assistant", content=generated_text),
-                finish_reason="stop",
+                message=ChatMessage(role="assistant", content=result["text"]),
+                finish_reason=result.get("finish_reason") or "stop",
             )
         ],
         usage=UsageInfo(
-            prompt_tokens=len(prompt.split()),
-            completion_tokens=num_tokens,
-            total_tokens=len(prompt.split()) + num_tokens,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
         ),
         memforge_telemetry=telemetry,
     )
+
+
+async def _sse_stream(prompt: str, params: SamplingParams, req: ChatCompletionRequest):
+    """Server-Sent Events in the OpenAI streaming chunk format."""
+    import json
+
+    completion_id = f"chatcmpl-{int(time.time() * 1000)}"
+    created = int(time.time())
+
+    def chunk(delta: Dict[str, Any], finish_reason: Optional[str] = None) -> str:
+        payload = {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": req.model,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        }
+        return f"data: {json.dumps(payload)}\n\n"
+
+    try:
+        source = (
+            ENGINE_MANAGER.speculative_stream(prompt, params)
+            if req.use_speculative
+            else ENGINE_MANAGER.stream(prompt, params)
+        )
+        yield chunk({"role": "assistant", "content": ""})
+        async for event in source:
+            if event["type"] == "token":
+                yield chunk(
+                    {"content": event["token"], "memforge_source": event.get("source")}
+                )
+            elif event["type"] == "error":
+                yield f"data: {json.dumps({'error': event['message']})}\n\n"
+                break
+            elif event["type"] == "done":
+                yield chunk({}, finish_reason=event.get("finish_reason") or "stop")
+    except Exception as exc:
+        yield f"data: {json.dumps({'error': f'{type(exc).__name__}: {exc}'})}\n\n"
+    yield "data: [DONE]\n\n"

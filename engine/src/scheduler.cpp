@@ -22,6 +22,7 @@ SchedulerStepResult Scheduler::step() {
 
     // 1. Check running sequences: allocate blocks if needed for decoding
     std::vector<SequencePtr> still_running;
+    std::vector<SequencePtr> preempted;
     for (auto& seq : running_queue_) {
         if (seq->is_finished()) {
             allocator_->free_sequence(*seq);
@@ -31,8 +32,16 @@ SchedulerStepResult Scheduler::step() {
 
         // Ensure sequence has enough capacity for next token
         if (!allocator_->ensure_capacity(*seq)) {
-            // Memory pressure: preemption or wait
-            seq->set_status(SequenceStatus::SWAPPED);
+            // Memory pressure: preempt by recomputation. Release the physical
+            // blocks back to the pool so shorter sequences can make progress,
+            // and re-queue at the head so this sequence is admitted first once
+            // memory frees up. Generated tokens are retained in the Sequence, so
+            // the ML layer re-runs prefill over prompt + output on readmission.
+            allocator_->free_sequence(*seq);
+            seq->reset_prefill();
+            seq->set_status(SequenceStatus::WAITING);
+            preempted.push_back(seq);
+            result.preempted_sequence_ids.push_back(seq->get_id());
             continue;
         }
 
@@ -40,10 +49,24 @@ SchedulerStepResult Scheduler::step() {
     }
     running_queue_ = std::move(still_running);
 
+    // Preempted sequences regain priority ahead of never-started requests.
+    for (auto it = preempted.rbegin(); it != preempted.rend(); ++it) {
+        waiting_queue_.push_front(*it);
+    }
+
     // 2. Promote waiting sequences to running if slots and memory are available
     while (!waiting_queue_.empty() && running_queue_.size() < max_num_seqs_) {
         auto seq = waiting_queue_.front();
         size_t needed_blocks = seq->get_num_required_blocks();
+
+        if (needed_blocks > allocator_->get_total_blocks()) {
+            // Unsatisfiable at any point in time: the request alone exceeds the
+            // entire pool. Abort it instead of head-of-line blocking the queue.
+            waiting_queue_.pop_front();
+            seq->set_status(SequenceStatus::ABORTED);
+            result.aborted_sequence_ids.push_back(seq->get_id());
+            continue;
+        }
 
         if (!allocator_->can_allocate(needed_blocks)) {
             // Cannot schedule more sequences in this iteration
@@ -81,6 +104,7 @@ SchedulerStepResult Scheduler::step() {
 
     result.num_free_blocks = allocator_->get_num_free_blocks();
     result.total_blocks = allocator_->get_total_blocks();
+    result.num_waiting = waiting_queue_.size();
     result.memory_utilization_ratio = allocator_->get_utilization_ratio();
 
     return result;
