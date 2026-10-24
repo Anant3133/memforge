@@ -93,14 +93,41 @@ async def websocket_stream_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            payload = json.loads(await websocket.receive_text())
+            raw_message = await websocket.receive_text()
+
+            # A malformed frame used to escape to the outer handler, which
+            # dropped the connection. One bad message from one tab should not
+            # end that tab's session, so it is reported like any other bad
+            # request and the socket stays open.
+            try:
+                payload = json.loads(raw_message)
+            except json.JSONDecodeError as exc:
+                await websocket.send_json(
+                    {"type": "error", "message": f"malformed JSON: {exc}"}
+                )
+                continue
+            if not isinstance(payload, dict):
+                await websocket.send_json(
+                    {"type": "error", "message": "expected a JSON object"}
+                )
+                continue
+
             prompt = (payload.get("prompt") or "").strip()
             if not prompt:
                 await websocket.send_json({"type": "error", "message": "prompt is required"})
                 continue
 
+            # Reject obviously wrong sampling values rather than letting a
+            # ValueError from deep in the engine surface as a stream error.
+            try:
+                params = _params_from(payload)
+            except (TypeError, ValueError) as exc:
+                await websocket.send_json(
+                    {"type": "error", "message": f"invalid parameters: {exc}"}
+                )
+                continue
+
             use_speculative = bool(payload.get("use_speculative", False))
-            params = _params_from(payload)
             rendered = _render_prompt(prompt, bool(payload.get("raw", False)))
 
             await websocket.send_json(
