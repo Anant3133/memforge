@@ -72,6 +72,28 @@ class CompletionRequest(BaseModel):
     use_speculative: bool = False
 
 
+def _require_content(text: str, field: str) -> str:
+    """
+    Reject a prompt with no content in it.
+
+    Without this the engine happily generates from nothing: an empty `prompt`
+    tokenizes to a one-token sequence, and an empty chat message renders through
+    the chat template into `"user: \\nassistant:"`, which is not empty at all. So
+    both used to return 200 and burn a scheduler slot and a block of KV cache on
+    a request that said nothing. It is unambiguously a client error, so it is a
+    400 -- and a 400 rather than a 422 because the body *is* well-formed; it is
+    the content that is unusable.
+
+    Whitespace-only counts as empty for the same reason.
+    """
+    if not text or not text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field} must not be empty or whitespace-only",
+        )
+    return text
+
+
 def _build_prompt(messages: List[ChatMessage]) -> str:
     """Render chat messages with the model's own chat template when it has one."""
     tokenizer = ENGINE_MANAGER.tokenizer
@@ -222,12 +244,19 @@ async def _generate_or_fail(request: Request, prompt: str, params: SamplingParam
 @router.post("/v1/completions")
 async def create_completion(req: CompletionRequest, request: Request):
     """Minimal raw-prompt completion endpoint (no chat template applied)."""
+    _require_content(req.prompt, "prompt")
     params = _sampling(req.max_tokens, req.temperature, req.top_p, req.seed)
     return await _generate_or_fail(request, req.prompt, params, req.use_speculative)
 
 
 @router.post("/v1/chat/completions")
 async def create_chat_completion(req: ChatCompletionRequest, request: Request):
+    if not req.messages:
+        raise HTTPException(status_code=400, detail="messages must not be empty")
+    # Checked on the joined message content, before the chat template runs: the
+    # template would otherwise turn an empty message into a non-empty prompt and
+    # hide the problem.
+    _require_content("".join(m.content for m in req.messages), "message content")
     prompt = _build_prompt(req.messages)
     params = _sampling(req.max_tokens, req.temperature, req.top_p, req.seed)
 
