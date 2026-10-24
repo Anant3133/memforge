@@ -29,6 +29,7 @@ from transformers.cache_utils import DynamicCache
 
 from memforge_ml.runtime.kv_pool import ModelKVSpec, PagedKVPool
 from memforge_ml.runtime.paged_cache import PagedCache
+from memforge_ml.runtime.prefix_sharing import block_owners, copy_block, sharing_telemetry
 from memforge_ml.runtime.sampling import SamplingParams, sample_logits
 
 try:
@@ -115,6 +116,7 @@ class ContinuousBatchingEngine:
         dtype: Optional[torch.dtype] = None,
         device: Optional[str] = None,
         batched_decode: bool = True,
+        enable_prefix_sharing: bool = True,
     ):
         if not HAS_CPP_ENGINE:
             raise RuntimeError(
@@ -137,7 +139,13 @@ class ContinuousBatchingEngine:
         self.pool = PagedKVPool(self.spec, num_blocks=num_blocks, block_size=block_size)
 
         self.allocator = memforge_c.BlockAllocator(num_blocks, block_size)
-        self.scheduler = memforge_c.Scheduler(self.allocator, max_num_seqs)
+        # Prefix sharing is opt-out so A/B benchmarking stays possible in one
+        # process. With it disabled the scheduler behaves exactly as it did
+        # before the feature existed.
+        self.prefix_cache = (
+            memforge_c.PrefixCache(self.allocator, block_size) if enable_prefix_sharing else None
+        )
+        self.scheduler = memforge_c.Scheduler(self.allocator, max_num_seqs, self.prefix_cache)
 
         self.eos_token_ids = self._resolve_eos_ids()
         self.runtimes: Dict[int, SequenceRuntime] = {}
@@ -150,6 +158,8 @@ class ContinuousBatchingEngine:
         self.total_steps = 0
         self.total_forward_passes = 0
         self.total_preemptions = 0
+        self.total_cached_prefix_tokens = 0   # prefill tokens skipped via a hit
+        self.total_cow_copies = 0
         self.engine_started_at = time.perf_counter()
         # Timestamps of recently emitted tokens, for a windowed throughput figure.
         # The lifetime average counts idle time and so understates a live gauge.
@@ -177,6 +187,7 @@ class ContinuousBatchingEngine:
             "max_num_seqs": self.max_num_seqs,
             "max_model_len": self.max_model_len,
             "batched_decode": self.batched_decode,
+            "prefix_sharing": self.prefix_cache is not None,
             "eos_token_ids": sorted(self.eos_token_ids),
             "kv_pool": self.pool.describe(),
         }
@@ -306,16 +317,91 @@ class ContinuousBatchingEngine:
         rt.cache.begin_step(block_table)
         rt.num_prefills += 1
 
+        # Leading tokens whose KV a prefix-cache hit already put in the pool.
+        # The scheduler guarantees this is strictly less than the sequence
+        # length (it withholds the final full block), so the suffix below is
+        # never empty -- a zero-length forward pass is undefined. The clamp is
+        # belt-and-braces against that invariant ever being relaxed.
+        cached = int(getattr(info, "num_cached_tokens", 0) or 0)
+        if cached >= len(rt.tokens):
+            cached = 0
+
         # On a fresh request this is just the prompt; after a preemption it is
-        # prompt + everything generated so far, recomputed in one pass.
-        ids = torch.tensor([rt.tokens], dtype=torch.long, device=self.device)
+        # prompt + everything generated so far, recomputed in one pass. Either
+        # way, only the uncached suffix goes through the model.
+        suffix = rt.tokens[cached:] if cached else rt.tokens
+        ids = torch.tensor([suffix], dtype=torch.long, device=self.device)
+
+        extra: Dict[str, Any] = {}
+        if cached:
+            # Advance the write cursor so the suffix lands *after* the cached
+            # prefix instead of on top of it -- overwriting it would corrupt the
+            # prefix for every other sequence sharing those blocks.
+            rt.cache.seed_position(cached)
+            # Positions must stay absolute, or RoPE rotates the suffix as though
+            # the prefix were not there -- fluent output, quietly wrong.
+            # `seed_position` alone is already enough for that, because
+            # transformers derives the cache position from the cache's reported
+            # length and PagedCache reports it correctly (a mutation test
+            # confirms removing these two lines changes nothing). They stay
+            # anyway: this is the one place where the engine knows the absolute
+            # offset for certain, and stating it costs nothing and does not
+            # depend on how a future transformers release infers it.
+            positions = torch.arange(cached, len(rt.tokens), device=self.device)
+            extra["position_ids"] = positions.unsqueeze(0)
+            extra["cache_position"] = positions
+
         with torch.no_grad():
-            out = self.model(input_ids=ids, past_key_values=rt.cache, use_cache=True)
+            out = self.model(input_ids=ids, past_key_values=rt.cache, use_cache=True, **extra)
         self.total_forward_passes += 1
-        self.total_prefill_tokens += len(rt.tokens)
+        self.total_prefill_tokens += len(suffix)
+        self.total_cached_prefix_tokens += cached
+
+        # The whole sequence is resident now: the prefix was already there and
+        # the suffix has just been written. Only now is it safe to advertise
+        # these blocks for reuse -- registering before the KV exists would serve
+        # the next sequence a block full of zeros.
+        if self.prefix_cache is not None:
+            self.prefix_cache.register_full_blocks(rt.tokens, block_table)
 
         token_id = sample_logits(out.logits[0, -1], rt.params, rt.generator)
         return self._accept_token(rt, token_id, source="target")
+
+    # -------------------------------------------------------- copy-on-write
+
+    def _begin_write_step(self, rt: SequenceRuntime, info) -> None:
+        """
+        Rebind a sequence's cache for this step, copying on write if needed.
+
+        A write must never land in a block another sequence is reading. Today the
+        allocator only ever shares *full* blocks and decode only ever writes the
+        trailing block, which is private by construction -- so `prepare_write`
+        returns None every time and this is a guard rather than a hot path. It
+        exists because the alternative to an unreachable guard is an unprotected
+        invariant: anything that later shares a non-final block (partial-block
+        sharing, a scheduler change) would silently corrupt a live prefix.
+        """
+        block_table = list(info.block_table)
+        rt.cache.begin_step(block_table)
+
+        if self.prefix_cache is None:
+            return
+        seq = self.scheduler.get_sequence(rt.seq_id)
+        if seq is None:
+            return
+
+        logical = rt.cache.position // self.block_size
+        cow = self.allocator.prepare_write(seq, logical)
+        if cow is None:
+            return
+
+        old_block, new_block = cow
+        # The block table was repointed in C++; carry the old contents over
+        # before the forward pass writes into the private copy, then rebind so
+        # the cache's memoized logical->physical translation is rebuilt.
+        copy_block(self.pool, old_block, new_block)
+        rt.cache.set_block_table(list(seq.get_block_table()))
+        self.total_cow_copies += 1
 
     # ----------------------------------------------------------------- decode
 
@@ -325,7 +411,7 @@ class ContinuousBatchingEngine:
             rt = self.runtimes.get(info.seq_id)
             if rt is None or rt.done or rt.cache is None:
                 continue
-            rt.cache.begin_step(list(info.block_table))
+            self._begin_write_step(rt, info)
             ids = torch.tensor([[rt.tokens[-1]]], dtype=torch.long, device=self.device)
             with torch.no_grad():
                 out = self.model(input_ids=ids, past_key_values=rt.cache, use_cache=True)
@@ -351,7 +437,7 @@ class ContinuousBatchingEngine:
             rt = self.runtimes.get(info.seq_id)
             if rt is None or rt.done or rt.cache is None:
                 continue
-            rt.cache.begin_step(list(info.block_table))
+            self._begin_write_step(rt, info)
             rts.append(rt)
 
         if not rts:
@@ -515,7 +601,14 @@ class ContinuousBatchingEngine:
         active = [rt for rt in self.runtimes.values() if not rt.done]
         free = self.allocator.get_num_free_blocks()
         total = self.allocator.get_total_blocks()
+        sharing = sharing_telemetry(
+            self.allocator,
+            self.pool,
+            self.prefix_cache,
+            owners=self.block_owners(),
+        )
         return {
+            **sharing,
             "uptime_s": round(uptime, 2),
             "steps": self.total_steps,
             "forward_passes": self.total_forward_passes,
@@ -534,6 +627,8 @@ class ContinuousBatchingEngine:
             "waiting_sequences": self.scheduler.get_num_waiting(),
             "running_sequences": self.scheduler.get_num_running(),
             "preemptions": self.total_preemptions,
+            "cached_prefix_tokens": self.total_cached_prefix_tokens,
+            "cow_copies": self.total_cow_copies,
             "total_blocks": total,
             "free_blocks": free,
             "allocated_blocks": total - free,
@@ -542,19 +637,32 @@ class ContinuousBatchingEngine:
             "kv_pool_mb": self.pool.describe()["total_mb"],
         }
 
+    def _live_block_tables(self) -> List[Any]:
+        return [
+            (seq_id, rt.cache.block_table)
+            for seq_id, rt in self.runtimes.items()
+            if not rt.done and rt.cache is not None
+        ]
+
     def block_occupancy(self) -> List[int]:
         """
         Per-physical-block owner map for the UI heatmap: index -> sequence id,
         or 0 for a free block.
+
+        A shared block has several owners and this reports only the last one
+        seen. The shape is kept as-is because the dashboard's memory heatmap
+        binds to it; `block_owners()` is the share-aware view alongside it.
         """
         occupancy = [0] * self.allocator.get_total_blocks()
-        for seq_id, rt in self.runtimes.items():
-            if rt.done or rt.cache is None:
-                continue
-            for block_id in rt.cache.block_table:
+        for seq_id, table in self._live_block_tables():
+            for block_id in table:
                 if 0 <= block_id < len(occupancy):
                     occupancy[block_id] = seq_id
         return occupancy
+
+    def block_owners(self) -> Dict[str, List[int]]:
+        """Block -> every sequence referencing it, so sharing is visible."""
+        return block_owners(self._live_block_tables(), self.allocator.get_total_blocks())
 
     # ------------------------------------------------------- blocking helpers
 

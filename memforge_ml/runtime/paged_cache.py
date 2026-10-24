@@ -107,6 +107,25 @@ class PagedCache(Cache):
             self.set_block_table(block_table)
         self._index_memo.clear()
 
+    def seed_position(self, num_cached_tokens: int) -> None:
+        """
+        Declare that the first `num_cached_tokens` positions are already resident.
+
+        Used by partial prefill after a prefix-cache hit: those tokens' Keys and
+        Values are already in the shared physical blocks, so the forward pass
+        feeds only the suffix. Moving the write cursor forward is what keeps the
+        suffix from landing on top of the cached prefix -- which would corrupt it
+        for every other sequence pointing at those same blocks.
+
+        `get_mask_sizes()` derives the causal mask span from `position`, so
+        seeding it also makes the mask cover cached + new without further work.
+        """
+        if num_cached_tokens < 0:
+            raise ValueError(f"num_cached_tokens must be non-negative, got {num_cached_tokens}")
+        for layer in self.layers:
+            layer.position = num_cached_tokens
+        self._index_memo.clear()
+
     def indices(self, start: int, end: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """Index translation for token range [start, end), memoized across layers."""
         key = (start, end)

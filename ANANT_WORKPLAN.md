@@ -374,15 +374,25 @@ out = self.model(
 
 Four traps here, each of which produces *plausible* output rather than an error:
 
-1. **`position_ids` must be absolute.** Default positions restart at 0 for the
-   suffix, so RoPE rotates the suffix as if the cached prefix were not there.
-   Output stays grammatical and is subtly wrong — exactly the failure that
-   byte-identity testing (§5.1) exists to catch.
+1. **`position_ids` must be absolute** — but this turned out *not* to be an
+   independent hazard. **Measured, 2026-10-24:** removing both `position_ids`
+   and `cache_position` from the partial-prefill call changes nothing, because
+   `transformers` derives the cache position from the cache's reported length
+   and `PagedCache.get_seq_length()` returns the seeded `position` correctly.
+   Trap 2 below subsumes this one. The explicit positions are kept as
+   belt-and-braces — the engine knows the absolute offset for certain at that
+   point and stating it does not depend on how a future `transformers` release
+   infers it — but they are not what makes partial prefill correct. The
+   original claim here overstated the risk; recorded rather than quietly
+   dropped.
 2. **`PagedCacheLayer.position` must start at `C`.** It is `0` in `__init__`
    ([paged_cache.py:36](memforge_ml/runtime/paged_cache.py#L36)) and the write
    range is derived from it, so without `seed_position` the suffix overwrites
    the shared prefix — corrupting it for every other sequence pointing at those
-   blocks. The worst bug available in this design.
+   blocks. The worst bug available in this design, **and the one that actually
+   matters**: deleting the `seed_position` call fails the byte-identity tests
+   immediately (verified by mutation, 2026-10-24). This single call is what
+   makes partial prefill correct.
 3. **The attention mask sizing already works.** `get_mask_sizes` returns
    `self.position + query_length`
    ([paged_cache.py:62](memforge_ml/runtime/paged_cache.py#L62)), so once
