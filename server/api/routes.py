@@ -9,13 +9,14 @@ time. `use_speculative` routes to the draft+target speculative runtime instead.
 import time
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from memforge_ml.runtime.sampling import SamplingParams
+from server.api.disconnect_handler import ClientDisconnected, run_cancellable
 from server.config import SERVER_CONFIG
-from server.engine_manager import ENGINE_MANAGER
+from server.engine_manager import ENGINE_MANAGER, EngineSaturated
 
 router = APIRouter()
 
@@ -153,36 +154,80 @@ async def engine_blocks():
     """
     Physical block ownership map for the memory heatmap: index -> owning
     sequence id, 0 meaning free.
+
+    `occupancy` keeps its original one-owner-per-block shape so the existing
+    heatmap is unaffected. `block_owners` is the share-aware view alongside it:
+    a prefix-shared block appears there with several owners, which a flat list
+    cannot express.
     """
     if ENGINE_MANAGER.engine is None:
         raise HTTPException(status_code=503, detail="engine not loaded yet")
     occupancy = ENGINE_MANAGER.block_occupancy()
+    owners = ENGINE_MANAGER.block_owners()
     return {
         "block_size": ENGINE_MANAGER.engine.block_size,
         "total_blocks": len(occupancy),
         "allocated_blocks": sum(1 for owner in occupancy if owner),
         "occupancy": occupancy,
+        "block_owners": owners,
+        "shared_blocks": sum(1 for ids in owners.values() if len(ids) > 1),
     }
 
 
-@router.post("/v1/completions")
-async def create_completion(req: CompletionRequest):
-    """Minimal raw-prompt completion endpoint (no chat template applied)."""
-    params = _sampling(req.max_tokens, req.temperature, req.top_p, req.seed)
+@router.get("/metrics", response_class=PlainTextResponse)
+async def metrics():
+    """Prometheus exposition of engine, memory and prefix-sharing state."""
+    return PlainTextResponse(
+        ENGINE_MANAGER.prometheus_metrics(), media_type="text/plain; version=0.0.4"
+    )
+
+
+#: Returned when the client hung up before its response was ready. Not a real
+#: HTTP status -- nothing is sent, because there is no longer a socket to send
+#: it on -- but FastAPI needs a response, and 499 is the established convention.
+CLIENT_CLOSED_REQUEST = 499
+
+
+async def _generate_or_fail(request: Request, prompt: str, params: SamplingParams,
+                            speculative: bool) -> Dict[str, Any]:
+    """
+    Run a non-streaming generation, mapping engine failures onto HTTP status.
+
+    Wrapped in `run_cancellable` because the bare await has no idea the client
+    left: it would generate every token into a response nobody reads, holding
+    physical blocks the whole time. On disconnect the sequence is aborted so its
+    blocks come straight back to the pool.
+    """
+    work = (
+        ENGINE_MANAGER.speculative_generate(prompt, params)
+        if speculative
+        else ENGINE_MANAGER.generate(prompt, params)
+    )
     try:
-        if req.use_speculative:
-            result = await ENGINE_MANAGER.speculative_generate(req.prompt, params)
-        else:
-            result = await ENGINE_MANAGER.generate(req.prompt, params)
+        return await run_cancellable(request, work)
+    except ClientDisconnected:
+        raise HTTPException(status_code=CLIENT_CLOSED_REQUEST, detail="client disconnected")
+    except EngineSaturated as exc:
+        # Must precede RuntimeError: EngineSaturated is one, and saturation is a
+        # "come back shortly" (429), not a "the engine is broken" (503).
+        raise HTTPException(
+            status_code=429, detail=str(exc), headers={"Retry-After": "1"}
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return result
+
+
+@router.post("/v1/completions")
+async def create_completion(req: CompletionRequest, request: Request):
+    """Minimal raw-prompt completion endpoint (no chat template applied)."""
+    params = _sampling(req.max_tokens, req.temperature, req.top_p, req.seed)
+    return await _generate_or_fail(request, req.prompt, params, req.use_speculative)
 
 
 @router.post("/v1/chat/completions")
-async def create_chat_completion(req: ChatCompletionRequest):
+async def create_chat_completion(req: ChatCompletionRequest, request: Request):
     prompt = _build_prompt(req.messages)
     params = _sampling(req.max_tokens, req.temperature, req.top_p, req.seed)
 
@@ -193,34 +238,29 @@ async def create_chat_completion(req: ChatCompletionRequest):
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    try:
-        if req.use_speculative:
-            result = await ENGINE_MANAGER.speculative_generate(prompt, params)
-            telemetry = {
-                "mode": "speculative",
-                "tokens_per_second": result["tokens_per_second"],
-                "time_to_first_token_ms": result["time_to_first_token_ms"],
-                "acceptance_rate": result["acceptance_rate"],
-                "drafted_tokens": result["drafted_tokens"],
-                "accepted_tokens": result["accepted_tokens"],
-                "target_forward_passes": result["target_forward_passes"],
-                "tokens_per_target_pass": result["tokens_per_target_pass"],
-                "rolled_back_tokens": result["rolled_back_tokens"],
-                "token_sources": result["token_sources"],
-            }
-        else:
-            result = await ENGINE_MANAGER.generate(prompt, params)
-            telemetry = {
-                "mode": "continuous_batching",
-                "tokens_per_second": result["tokens_per_second"],
-                "time_to_first_token_ms": result["time_to_first_token_ms"],
-                "num_preemptions": result["num_preemptions"],
-                "engine": ENGINE_MANAGER.live_metrics(),
-            }
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    result = await _generate_or_fail(request, prompt, params, req.use_speculative)
+
+    if req.use_speculative:
+        telemetry = {
+            "mode": "speculative",
+            "tokens_per_second": result["tokens_per_second"],
+            "time_to_first_token_ms": result["time_to_first_token_ms"],
+            "acceptance_rate": result["acceptance_rate"],
+            "drafted_tokens": result["drafted_tokens"],
+            "accepted_tokens": result["accepted_tokens"],
+            "target_forward_passes": result["target_forward_passes"],
+            "tokens_per_target_pass": result["tokens_per_target_pass"],
+            "rolled_back_tokens": result["rolled_back_tokens"],
+            "token_sources": result["token_sources"],
+        }
+    else:
+        telemetry = {
+            "mode": "continuous_batching",
+            "tokens_per_second": result["tokens_per_second"],
+            "time_to_first_token_ms": result["time_to_first_token_ms"],
+            "num_preemptions": result["num_preemptions"],
+            "engine": ENGINE_MANAGER.live_metrics(),
+        }
 
     completion_tokens = result["generated_tokens"]
     prompt_tokens = result.get("prompt_tokens", 0)
@@ -268,6 +308,9 @@ async def _sse_stream(prompt: str, params: SamplingParams, req: ChatCompletionRe
             else ENGINE_MANAGER.stream(prompt, params)
         )
         yield chunk({"role": "assistant", "content": ""})
+        # A client hangup closes this generator, which runs the `finally` in
+        # EngineManager.stream() and aborts the sequence -- so the blocks come
+        # back instead of being held for a connection that is gone.
         async for event in source:
             if event["type"] == "token":
                 yield chunk(

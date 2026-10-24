@@ -30,6 +30,16 @@ from server.config import SERVER_CONFIG, ServerConfig
 DONE = object()  # sentinel pushed onto a request queue when its stream ends
 
 
+class EngineSaturated(RuntimeError):
+    """
+    Raised when the engine is already serving `max_concurrency` requests.
+
+    Surfaced to clients as 429 rather than queued behind a blocking await: a
+    held-open connection on a saturated server turns load into timeouts, which
+    is strictly worse than telling the caller to come back.
+    """
+
+
 @dataclass
 class StreamHandle:
     seq_id: int
@@ -64,6 +74,11 @@ class EngineManager:
         self._wake = asyncio.Event()
         self._submit_lock = asyncio.Lock()
         self._spec_lock = asyncio.Lock()
+        # Admission control. `max_concurrency` has been in ServerConfig since the
+        # server was written and was read by nothing -- a limit that looked
+        # enforced but was not. Counted rather than a Semaphore so saturation can
+        # be *reported* (429) instead of silently awaited.
+        self._in_flight = 0
 
     # ----------------------------------------------------------- model loading
 
@@ -151,6 +166,8 @@ class EngineManager:
         for queue in self._queues.values():
             queue.put_nowait(DONE)
         self._queues.clear()
+        self._tracked.clear()
+        self._in_flight = 0
 
     # ------------------------------------------------------------- engine loop
 
@@ -217,9 +234,23 @@ class EngineManager:
 
     def _close(self, seq_id: int) -> None:
         queue = self._queues.pop(seq_id, None)
+        was_tracked = seq_id in self._tracked
         self._tracked.discard(seq_id)
+        if was_tracked and self._in_flight > 0:
+            # Every stream ends here exactly once -- completion, abort, error and
+            # shutdown all funnel through _close -- so the in-flight count cannot
+            # drift and permanently strand capacity.
+            self._in_flight -= 1
         if queue is not None:
             queue.put_nowait(DONE)
+
+    @property
+    def in_flight(self) -> int:
+        return self._in_flight
+
+    @property
+    def at_capacity(self) -> bool:
+        return self._in_flight >= self.config.max_concurrency
 
     # -------------------------------------------------------------- submission
 
@@ -241,6 +272,7 @@ class EngineManager:
             # Queues belonged to the previous loop and can never be drained now.
             self._queues.clear()
             self._tracked.clear()
+            self._in_flight = 0
             self._task = None
 
         if self._task is None or self._task.done():
@@ -253,10 +285,18 @@ class EngineManager:
         self._ensure_loop()
 
         async with self._submit_lock:
+            # Checked under the lock so simultaneous arrivals cannot both slip
+            # past the limit.
+            if self._in_flight >= self.config.max_concurrency:
+                raise EngineSaturated(
+                    f"engine at capacity: {self._in_flight} requests in flight "
+                    f"(max_concurrency={self.config.max_concurrency})"
+                )
             seq_id = self.engine.submit(prompt, params)
             queue: "asyncio.Queue[Any]" = asyncio.Queue()
             self._queues[seq_id] = queue
             self._tracked.add(seq_id)
+            self._in_flight += 1
         self._wake.set()
         return StreamHandle(seq_id=seq_id, queue=queue)
 
@@ -372,6 +412,13 @@ class EngineManager:
             "running_sequences": telemetry["running_sequences"],
             "waiting_sequences": telemetry["waiting_sequences"],
             "preemptions": telemetry["preemptions"],
+            # Prefix sharing. Present and zeroed when sharing is off, so the
+            # dashboard binds to one stable shape either way.
+            "shared_blocks": telemetry["shared_blocks"],
+            "memory_saved_mb": telemetry["memory_saved_mb"],
+            "prefix_hit_rate": telemetry["prefix_hit_rate"],
+            "in_flight": self._in_flight,
+            "max_concurrency": self.config.max_concurrency,
         }
 
     def status(self) -> Dict[str, Any]:
@@ -379,6 +426,8 @@ class EngineManager:
             "ready": self.ready,
             "load_error": self.load_error,
             "speculative_available": self.spec_engine is not None,
+            "in_flight": self._in_flight,
+            "at_capacity": self.at_capacity,
             "config": self.config.model_dump(),
         }
         if self.engine is not None:
@@ -389,6 +438,63 @@ class EngineManager:
 
     def block_occupancy(self) -> List[int]:
         return self.engine.block_occupancy() if self.engine is not None else []
+
+    def block_owners(self) -> Dict[str, List[int]]:
+        """Share-aware block map: block id -> every sequence referencing it."""
+        return self.engine.block_owners() if self.engine is not None else {}
+
+    def prometheus_metrics(self) -> str:
+        """
+        Plain-text Prometheus exposition.
+
+        Hand-rolled rather than pulling in a client library: the whole surface is
+        a dozen gauges. It doubles as the scrape target for the stress harness,
+        so that does not have to track the JSON telemetry shape.
+        """
+        lines = [
+            "# HELP memforge_engine_ready Whether the engine finished loading.",
+            "# TYPE memforge_engine_ready gauge",
+            f"memforge_engine_ready {int(self.ready)}",
+            "# HELP memforge_requests_in_flight Requests currently admitted.",
+            "# TYPE memforge_requests_in_flight gauge",
+            f"memforge_requests_in_flight {self._in_flight}",
+            "# HELP memforge_max_concurrency Configured admission limit.",
+            "# TYPE memforge_max_concurrency gauge",
+            f"memforge_max_concurrency {self.config.max_concurrency}",
+        ]
+        if self.engine is None:
+            return "\n".join(lines) + "\n"
+
+        t = self.engine.telemetry()
+        gauges = [
+            ("memforge_blocks_total", t["total_blocks"], "Physical KV blocks in the pool."),
+            ("memforge_blocks_allocated", t["allocated_blocks"], "Blocks currently held."),
+            ("memforge_blocks_free", t["free_blocks"], "Blocks available."),
+            ("memforge_blocks_shared", t["shared_blocks"], "Blocks with more than one referrer."),
+            ("memforge_blocks_saved", t["blocks_saved"], "Allocations avoided by prefix sharing."),
+            ("memforge_memory_saved_mb", t["memory_saved_mb"], "KV megabytes saved by sharing."),
+            ("memforge_prefix_hit_rate", t["prefix_hit_rate"], "Prefix-cache hit rate."),
+            ("memforge_prefix_cached_blocks", t["cached_prefix_blocks"], "Blocks registered shareable."),
+            ("memforge_memory_utilization", t["memory_utilization"], "Fraction of the pool allocated."),
+            ("memforge_sequences_running", t["running_sequences"], "Sequences in the running queue."),
+            ("memforge_sequences_waiting", t["waiting_sequences"], "Sequences awaiting admission."),
+            ("memforge_tokens_per_forward_pass", t["tokens_per_forward_pass"], "Batching effectiveness."),
+            ("memforge_tokens_generated_total", t["tokens_generated"], "Tokens generated since start."),
+            ("memforge_forward_passes_total", t["forward_passes"], "Forward passes since start."),
+            ("memforge_preemptions_total", t["preemptions"], "Sequences preempted under pressure."),
+            ("memforge_cow_copies_total", t["cow_copies"], "Copy-on-write block copies performed."),
+        ]
+        for name, value, help_text in gauges:
+            lines.append(f"# HELP {name} {help_text}")
+            lines.append(f"# TYPE {name} gauge")
+            lines.append(f"{name} {value}")
+
+        # The invariant the stress harness watches: nothing leaks.
+        leaked = t["total_blocks"] - t["free_blocks"] - t["allocated_blocks"]
+        lines.append("# HELP memforge_blocks_leaked total - free - allocated; must always be 0.")
+        lines.append("# TYPE memforge_blocks_leaked gauge")
+        lines.append(f"memforge_blocks_leaked {leaked}")
+        return "\n".join(lines) + "\n"
 
 
 ENGINE_MANAGER = EngineManager()
