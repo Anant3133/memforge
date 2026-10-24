@@ -261,6 +261,26 @@ async def create_chat_completion(req: ChatCompletionRequest, request: Request):
     params = _sampling(req.max_tokens, req.temperature, req.top_p, req.seed)
 
     if req.stream:
+        # Capacity is checked *before* the StreamingResponse is constructed.
+        # Once it exists, 200 OK has already been committed to the wire, so a
+        # later EngineSaturated can only surface as an error chunk inside a
+        # successful response -- which leaves the client unable to tell
+        # backpressure from a real failure, and hides Retry-After. Checking here
+        # keeps the streaming and non-streaming paths consistent.
+        #
+        # There is a small race: capacity can be taken between this check and
+        # the submit inside the generator. That is acceptable, because the
+        # fallback is the in-stream error below, so it degrades to the old
+        # behaviour rather than breaking.
+        if ENGINE_MANAGER.at_capacity:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"engine at capacity: {ENGINE_MANAGER.in_flight} requests in "
+                    f"flight (max_concurrency={SERVER_CONFIG.max_concurrency})"
+                ),
+                headers={"Retry-After": "1"},
+            )
         return StreamingResponse(
             _sse_stream(prompt, params, req),
             media_type="text/event-stream",
@@ -350,6 +370,17 @@ async def _sse_stream(prompt: str, params: SamplingParams, req: ChatCompletionRe
                 break
             elif event["type"] == "done":
                 yield chunk({}, finish_reason=event.get("finish_reason") or "stop")
+    except EngineSaturated as exc:
+        # Reachable only through the race noted at the capacity check above: the
+        # headers are already sent, so this cannot be a 429. A machine-readable
+        # code lets the client treat it as backpressure anyway rather than
+        # guessing from the message text.
+        yield (
+            "data: "
+            + json.dumps({"error": str(exc), "code": "engine_saturated",
+                          "retry_after": 1})
+            + "\n\n"
+        )
     except Exception as exc:
         yield f"data: {json.dumps({'error': f'{type(exc).__name__}: {exc}'})}\n\n"
     yield "data: [DONE]\n\n"

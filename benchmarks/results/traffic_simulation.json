@@ -1,0 +1,1007 @@
+{
+  "simulator": "traffic",
+  "generated_at": "2026-10-25T01:06:38",
+  "config": {
+    "url": "http://127.0.0.1:8142",
+    "transport": "sse",
+    "concurrency": 12,
+    "requests_per_user": 8,
+    "total_requests": 96,
+    "disconnect_rate": 0.25,
+    "tokens": [
+      8,
+      24
+    ],
+    "think_s": [
+      0.0,
+      0.4
+    ],
+    "seed": 0
+  },
+  "duration_s": 24.76,
+  "requests_sent": 96,
+  "completed": 40,
+  "disconnected": 18,
+  "errors": 0,
+  "status_histogram": {
+    "429": 38,
+    "disconnected": 18,
+    "200": 40
+  },
+  "blocks_allocated_before": 0,
+  "blocks_allocated_after": 0,
+  "leaked_blocks": 0,
+  "p50_ttft_ms": 352.89,
+  "p95_ttft_ms": 911.05,
+  "p99_ttft_ms": 911.89,
+  "mean_tok_per_sec": 5.33,
+  "total_tokens": 672,
+  "verdicts": [
+    "PASS  no leaked blocks",
+    "PASS  all physical blocks returned to the pool",
+    "PASS  only 200s, 429s and deliberate disconnects",
+    "NOTE  18 clients hung up mid-stream; the block counts above are the check that the server noticed"
+  ],
+  "outcomes": [
+    {
+      "user": 8,
+      "index": 0,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.039,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 9,
+      "index": 0,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.039,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 10,
+      "index": 0,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.041,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 11,
+      "index": 0,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.041,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 8,
+      "index": 1,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.006,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 10,
+      "index": 1,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.005,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 9,
+      "index": 1,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.009,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 10,
+      "index": 2,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.005,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 11,
+      "index": 1,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.016,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 8,
+      "index": 2,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.014,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 10,
+      "index": 3,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.014,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 11,
+      "index": 2,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.008,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 10,
+      "index": 4,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.008,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 9,
+      "index": 2,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.006,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 8,
+      "index": 3,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.007,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 9,
+      "index": 3,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.012,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 11,
+      "index": 3,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.011,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 8,
+      "index": 4,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.006,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 11,
+      "index": 4,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.007,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 9,
+      "index": 4,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.005,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 10,
+      "index": 5,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.016,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 8,
+      "index": 5,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.015,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 11,
+      "index": 5,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.014,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 9,
+      "index": 5,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.004,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 2,
+      "index": 0,
+      "status": 200,
+      "ttft_ms": 910.68,
+      "total_s": 0.913,
+      "tokens": 1,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 8,
+      "index": 6,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.006,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 9,
+      "index": 6,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.012,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 2,
+      "index": 1,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.011,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 10,
+      "index": 6,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.007,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 8,
+      "index": 7,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.006,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 9,
+      "index": 7,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.007,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 10,
+      "index": 7,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.011,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 2,
+      "index": 2,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.011,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 1,
+      "index": 0,
+      "status": 200,
+      "ttft_ms": 911.38,
+      "total_s": 1.564,
+      "tokens": 4,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 2,
+      "index": 3,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.007,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 2,
+      "index": 4,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.007,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 2,
+      "index": 5,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.007,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 5,
+      "index": 0,
+      "status": 200,
+      "ttft_ms": 910.99,
+      "total_s": 2.485,
+      "tokens": 8,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 0,
+      "index": 0,
+      "status": 200,
+      "ttft_ms": 119.1,
+      "total_s": 2.49,
+      "tokens": 9,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 5,
+      "index": 1,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.007,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 5,
+      "index": 2,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.007,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 2,
+      "index": 6,
+      "status": 200,
+      "ttft_ms": 396.2,
+      "total_s": 0.839,
+      "tokens": 3,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 2,
+      "index": 7,
+      "status": 429,
+      "ttft_ms": null,
+      "total_s": 0.008,
+      "tokens": 0,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 1,
+      "index": 1,
+      "status": 200,
+      "ttft_ms": 358.05,
+      "total_s": 2.415,
+      "tokens": 11,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 11,
+      "index": 6,
+      "status": 200,
+      "ttft_ms": 297.91,
+      "total_s": 3.439,
+      "tokens": 16,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 3,
+      "index": 0,
+      "status": 200,
+      "ttft_ms": 912.3,
+      "total_s": 4.646,
+      "tokens": 19,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 4,
+      "index": 0,
+      "status": 200,
+      "ttft_ms": 911.57,
+      "total_s": 4.861,
+      "tokens": 20,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 7,
+      "index": 0,
+      "status": 200,
+      "ttft_ms": 909.84,
+      "total_s": 4.861,
+      "tokens": 20,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 6,
+      "index": 0,
+      "status": 200,
+      "ttft_ms": 910.44,
+      "total_s": 5.627,
+      "tokens": 23,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 4,
+      "index": 1,
+      "status": 200,
+      "ttft_ms": 532.18,
+      "total_s": 0.93,
+      "tokens": 3,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 4,
+      "index": 2,
+      "status": 200,
+      "ttft_ms": 306.79,
+      "total_s": 0.309,
+      "tokens": 1,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 5,
+      "index": 3,
+      "status": 200,
+      "ttft_ms": 406.6,
+      "total_s": 2.93,
+      "tokens": 13,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 5,
+      "index": 4,
+      "status": 200,
+      "ttft_ms": 371.05,
+      "total_s": 0.373,
+      "tokens": 1,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 3,
+      "index": 1,
+      "status": 200,
+      "ttft_ms": 283.57,
+      "total_s": 1.826,
+      "tokens": 8,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 7,
+      "index": 1,
+      "status": 200,
+      "ttft_ms": 534.76,
+      "total_s": 2.277,
+      "tokens": 9,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 4,
+      "index": 3,
+      "status": 200,
+      "ttft_ms": 259.31,
+      "total_s": 0.708,
+      "tokens": 3,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 0,
+      "index": 1,
+      "status": 200,
+      "ttft_ms": 424.24,
+      "total_s": 5.03,
+      "tokens": 23,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 7,
+      "index": 2,
+      "status": 200,
+      "ttft_ms": 298.94,
+      "total_s": 0.688,
+      "tokens": 3,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 0,
+      "index": 2,
+      "status": 200,
+      "ttft_ms": 281.98,
+      "total_s": 0.283,
+      "tokens": 1,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 11,
+      "index": 7,
+      "status": 200,
+      "ttft_ms": 407.93,
+      "total_s": 3.658,
+      "tokens": 16,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 0,
+      "index": 3,
+      "status": 200,
+      "ttft_ms": 253.19,
+      "total_s": 0.255,
+      "tokens": 1,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 1,
+      "index": 2,
+      "status": 200,
+      "ttft_ms": 370.35,
+      "total_s": 4.738,
+      "tokens": 22,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 5,
+      "index": 5,
+      "status": 200,
+      "ttft_ms": 423.64,
+      "total_s": 2.612,
+      "tokens": 13,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 6,
+      "index": 1,
+      "status": 200,
+      "ttft_ms": 441.55,
+      "total_s": 3.927,
+      "tokens": 19,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 4,
+      "index": 4,
+      "status": 200,
+      "ttft_ms": 340.0,
+      "total_s": 1.956,
+      "tokens": 10,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 1,
+      "index": 3,
+      "status": 200,
+      "ttft_ms": 395.57,
+      "total_s": 0.398,
+      "tokens": 1,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 4,
+      "index": 5,
+      "status": 200,
+      "ttft_ms": 494.36,
+      "total_s": 0.895,
+      "tokens": 3,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 7,
+      "index": 3,
+      "status": 200,
+      "ttft_ms": 280.93,
+      "total_s": 2.905,
+      "tokens": 15,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 4,
+      "index": 6,
+      "status": 200,
+      "ttft_ms": 347.73,
+      "total_s": 0.635,
+      "tokens": 3,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 3,
+      "index": 2,
+      "status": 200,
+      "ttft_ms": 299.86,
+      "total_s": 4.418,
+      "tokens": 23,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 0,
+      "index": 4,
+      "status": 200,
+      "ttft_ms": 260.46,
+      "total_s": 2.187,
+      "tokens": 11,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 5,
+      "index": 6,
+      "status": 200,
+      "ttft_ms": 451.12,
+      "total_s": 2.655,
+      "tokens": 13,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 1,
+      "index": 4,
+      "status": 200,
+      "ttft_ms": 397.14,
+      "total_s": 2.762,
+      "tokens": 14,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 7,
+      "index": 4,
+      "status": 200,
+      "ttft_ms": 217.77,
+      "total_s": 1.708,
+      "tokens": 9,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 7,
+      "index": 5,
+      "status": 200,
+      "ttft_ms": 309.24,
+      "total_s": 0.311,
+      "tokens": 1,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 5,
+      "index": 7,
+      "status": 200,
+      "ttft_ms": 255.22,
+      "total_s": 0.826,
+      "tokens": 4,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 6,
+      "index": 2,
+      "status": 200,
+      "ttft_ms": 390.07,
+      "total_s": 4.116,
+      "tokens": 21,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 4,
+      "index": 7,
+      "status": 200,
+      "ttft_ms": 322.96,
+      "total_s": 2.674,
+      "tokens": 14,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 3,
+      "index": 3,
+      "status": 200,
+      "ttft_ms": 325.05,
+      "total_s": 2.802,
+      "tokens": 15,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 3,
+      "index": 4,
+      "status": 200,
+      "ttft_ms": 311.66,
+      "total_s": 0.574,
+      "tokens": 3,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 7,
+      "index": 6,
+      "status": 200,
+      "ttft_ms": 322.53,
+      "total_s": 1.724,
+      "tokens": 11,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 6,
+      "index": 3,
+      "status": 200,
+      "ttft_ms": 297.1,
+      "total_s": 1.46,
+      "tokens": 10,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 0,
+      "index": 5,
+      "status": 200,
+      "ttft_ms": 450.02,
+      "total_s": 3.888,
+      "tokens": 23,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 1,
+      "index": 5,
+      "status": 200,
+      "ttft_ms": 262.57,
+      "total_s": 3.855,
+      "tokens": 23,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 7,
+      "index": 7,
+      "status": 200,
+      "ttft_ms": 480.11,
+      "total_s": 2.09,
+      "tokens": 9,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 0,
+      "index": 6,
+      "status": 200,
+      "ttft_ms": 519.09,
+      "total_s": 2.186,
+      "tokens": 10,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 6,
+      "index": 4,
+      "status": 200,
+      "ttft_ms": 482.33,
+      "total_s": 3.24,
+      "tokens": 16,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 3,
+      "index": 5,
+      "status": 200,
+      "ttft_ms": 220.94,
+      "total_s": 4.336,
+      "tokens": 23,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 1,
+      "index": 6,
+      "status": 200,
+      "ttft_ms": 314.69,
+      "total_s": 2.871,
+      "tokens": 17,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 6,
+      "index": 5,
+      "status": 200,
+      "ttft_ms": 369.56,
+      "total_s": 1.953,
+      "tokens": 11,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 0,
+      "index": 7,
+      "status": 200,
+      "ttft_ms": 345.7,
+      "total_s": 3.928,
+      "tokens": 23,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 1,
+      "index": 7,
+      "status": 200,
+      "ttft_ms": 266.63,
+      "total_s": 2.079,
+      "tokens": 13,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 3,
+      "index": 6,
+      "status": 200,
+      "ttft_ms": 366.28,
+      "total_s": 3.034,
+      "tokens": 20,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 3,
+      "index": 7,
+      "status": 200,
+      "ttft_ms": 244.85,
+      "total_s": 0.348,
+      "tokens": 2,
+      "disconnected": true,
+      "error": null
+    },
+    {
+      "user": 6,
+      "index": 6,
+      "status": 200,
+      "ttft_ms": 257.58,
+      "total_s": 2.818,
+      "tokens": 23,
+      "disconnected": false,
+      "error": null
+    },
+    {
+      "user": 6,
+      "index": 7,
+      "status": 200,
+      "ttft_ms": 122.29,
+      "total_s": 0.589,
+      "tokens": 8,
+      "disconnected": false,
+      "error": null
+    }
+  ]
+}

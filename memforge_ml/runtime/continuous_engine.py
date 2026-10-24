@@ -18,6 +18,7 @@ forward pass, and scattered back into their own blocks.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -161,6 +162,13 @@ class ContinuousBatchingEngine:
         self.total_cached_prefix_tokens = 0   # prefill tokens skipped via a hit
         self.total_cow_copies = 0
         self.engine_started_at = time.perf_counter()
+
+        # Aborts arrive from whatever thread the server's event loop runs on,
+        # while step() runs in a worker thread. They are queued here and applied
+        # at the top of step(), so every mutation of engine state happens on the
+        # stepping thread. See abort() for why that matters.
+        self._abort_lock = threading.Lock()
+        self._pending_aborts: set = set()
         # Timestamps of recently emitted tokens, for a windowed throughput figure.
         # The lifetime average counts idle time and so understates a live gauge.
         self.throughput_window_s = 5.0
@@ -230,16 +238,54 @@ class ContinuousBatchingEngine:
         return seq_id
 
     def abort(self, seq_id: int) -> bool:
+        """
+        Request that a sequence be abandoned. Safe to call from any thread.
+
+        The teardown is deferred to the next `step()` rather than done here, and
+        that is not tidiness -- it fixes a real crash. The server aborts from its
+        asyncio thread when a client disconnects, while `step()` runs in a worker
+        thread. Tearing down inline raced with the step in progress two ways:
+        clearing `rt.cache` made a live decode fail with
+        `'NoneType' object has no attribute 'indices'`, and freeing the physical
+        blocks mid-step was worse still, because the step would carry on writing
+        into blocks the allocator had already handed to another sequence.
+
+        Found by scripts/traffic_simulator.py --disconnect-rate: 32 of 96
+        requests hit it under concurrent load with disconnects, and nothing else
+        in the project exercised that combination.
+
+        Returns True if the sequence existed and was still running.
+        """
         rt = self.runtimes.get(seq_id)
-        if rt is None:
+        if rt is None or rt.done:
             return False
-        self.scheduler.abort_sequence(seq_id)
-        self._finish(rt, "aborted")
+        with self._abort_lock:
+            self._pending_aborts.add(seq_id)
         return True
+
+    def _process_pending_aborts(self) -> None:
+        """Apply queued aborts. Runs on the stepping thread only."""
+        with self._abort_lock:
+            if not self._pending_aborts:
+                return
+            pending = self._pending_aborts
+            self._pending_aborts = set()
+
+        for seq_id in pending:
+            rt = self.runtimes.get(seq_id)
+            if rt is None or rt.done:
+                continue
+            self.scheduler.abort_sequence(seq_id)
+            self._finish(rt, "aborted")
 
     # ------------------------------------------------------------------ steps
 
     def has_work(self) -> bool:
+        # A queued-but-unapplied abort counts as work, so the next step runs and
+        # drains it rather than the engine going idle with it still pending.
+        with self._abort_lock:
+            if self._pending_aborts:
+                return True
         return self.scheduler.has_unfinished_sequences() or any(
             not rt.done for rt in self.runtimes.values()
         )
@@ -247,6 +293,9 @@ class ContinuousBatchingEngine:
     def step(self) -> StepReport:
         """Run exactly one iteration-level scheduling + execution step."""
         t0 = time.perf_counter()
+        # Before anything reads engine state, apply aborts requested from other
+        # threads, so the rest of this step sees a consistent view.
+        self._process_pending_aborts()
         result = self.scheduler.step()
         self._step_index += 1
         self.total_steps += 1

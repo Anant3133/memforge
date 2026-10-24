@@ -8,6 +8,7 @@ not collide on a shared branch.
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 from fastapi import Request
@@ -294,6 +295,133 @@ def test_blocks_endpoint_exposes_block_owners(client, stub_engine):
     assert isinstance(payload["block_owners"], dict)
     for block_str, owners in payload["block_owners"].items():
         assert payload["occupancy"][int(block_str)] in owners
+
+
+# ------------------------------------------------------ threaded abort safety
+
+def test_abort_is_deferred_to_the_stepping_thread(tiny_model, stub_tokenizer):
+    """
+    abort() must not tear the sequence down inline.
+
+    The server aborts from its asyncio thread when a client disconnects, while
+    step() runs in a worker thread. Tearing down inline raced with the step in
+    progress: clearing rt.cache made a live decode fail with
+    "'NoneType' object has no attribute 'indices'", and freeing the blocks
+    mid-step was worse, because the step carried on writing into blocks the
+    allocator had already reassigned.
+    """
+    engine = ContinuousBatchingEngine(
+        tiny_model, stub_tokenizer, block_size=4, num_blocks=64,
+        max_num_seqs=4, max_model_len=128,
+    )
+    seq_id = engine.submit("abort me", SamplingParams(max_new_tokens=50, temperature=0.0))
+    engine.step()
+    engine.step()
+
+    runtime = engine.runtimes[seq_id]
+    assert runtime.cache is not None
+    allocated = engine.allocator.get_num_allocated_blocks()
+    assert allocated > 0
+
+    assert engine.abort(seq_id) is True
+    # Nothing has been torn down yet: the request is queued, not applied.
+    assert runtime.cache is not None, "abort mutated engine state inline"
+    assert not runtime.done
+    assert engine.allocator.get_num_allocated_blocks() == allocated
+    # But the engine must know there is work left, or it would go idle with the
+    # abort still pending.
+    assert engine.has_work()
+
+    engine.step()
+    assert runtime.done
+    assert runtime.finish_reason == "aborted"
+    assert engine.allocator.get_num_free_blocks() == engine.allocator.get_total_blocks()
+
+
+def test_concurrent_aborts_do_not_corrupt_a_running_step(tiny_model, stub_tokenizer):
+    """
+    Hammer abort() from other threads while the engine steps.
+
+    This is the shape of the production failure: 32 of 96 requests errored under
+    concurrent load with client disconnects. Any exception escaping step(), or
+    any block left allocated at the end, is the bug returning.
+
+    Honest caveat: this one is a smoke test, not a guarantee. Reinstating the
+    inline abort does **not** reliably fail it, because hitting the window
+    depends on thread timing. `test_abort_is_deferred_to_the_stepping_thread`
+    above is the test with teeth -- it asserts the contract directly and does
+    fail when the deferral is removed. This test is here to catch the coarser
+    failures (an exception escaping, a leak) that a timing-independent test
+    cannot see.
+    """
+    import threading
+
+    engine = ContinuousBatchingEngine(
+        tiny_model, stub_tokenizer, block_size=4, num_blocks=96,
+        max_num_seqs=8, max_model_len=128,
+    )
+    params = SamplingParams(max_new_tokens=40, temperature=0.0, stop_on_eos=False)
+    seq_ids = [engine.submit(f"concurrent abort {i}", params) for i in range(8)]
+
+    # Let them all get admitted and prefilled first.
+    for _ in range(3):
+        engine.step()
+
+    stop = threading.Event()
+    errors = []
+
+    def aborter(ids):
+        while not stop.is_set():
+            for seq_id in ids:
+                try:
+                    engine.abort(seq_id)
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"abort raised {type(exc).__name__}: {exc}")
+            time.sleep(0.001)
+
+    threads = [
+        threading.Thread(target=aborter, args=(seq_ids[:4],), daemon=True),
+        threading.Thread(target=aborter, args=(seq_ids[4:],), daemon=True),
+    ]
+    for thread in threads:
+        thread.start()
+
+    try:
+        steps = 0
+        while engine.has_work() and steps < 400:
+            try:
+                engine.step()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"step raised {type(exc).__name__}: {exc}")
+                break
+            steps += 1
+    finally:
+        stop.set()
+        for thread in threads:
+            thread.join(timeout=5)
+
+    engine.step()
+
+    assert not errors, errors
+    total = engine.allocator.get_total_blocks()
+    assert engine.allocator.get_num_free_blocks() == total, "blocks leaked under concurrent aborts"
+    for seq_id in seq_ids:
+        assert engine.runtimes[seq_id].done
+
+
+def test_aborting_an_unknown_or_finished_sequence_is_false(tiny_model, stub_tokenizer):
+    engine = ContinuousBatchingEngine(
+        tiny_model, stub_tokenizer, block_size=4, num_blocks=32,
+        max_num_seqs=2, max_model_len=64,
+    )
+    assert engine.abort(9999) is False
+
+    seq_id = engine.submit("short", SamplingParams(max_new_tokens=2, temperature=0.0))
+    engine.generate([])  # drain
+    while engine.has_work():
+        engine.step()
+    engine.step()
+    assert engine.abort(seq_id) is False, "a finished sequence cannot be aborted again"
 
 
 # ------------------------------------------------- websocket prompt rendering
