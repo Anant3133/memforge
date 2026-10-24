@@ -4,8 +4,14 @@ import { TelemetryMetrics } from './components/TelemetryMetrics';
 import { MemoryVisualizer } from './components/MemoryVisualizer';
 import { SpeculativeDiff, StreamToken } from './components/SpeculativeDiff';
 import { ChatStream } from './components/ChatStream';
+import { PrefixVisualizer } from './components/PrefixVisualizer';
+import { BenchmarkView, RequestTiming, TelemetrySample } from './components/BenchmarkView';
+import { StatusBanner, ConnectionState } from './components/StatusBanner';
 import { StreamClient, TelemetryClient, StreamEvent, TelemetryEvent } from './services/websocket';
 import { fetchHealth, fetchEngineStatus } from './services/api';
+
+/** Telemetry arrives every 0.4 s, so this is roughly a 48-second window. */
+const MAX_SAMPLES = 120;
 
 interface EngineInfo {
   targetModel: string;
@@ -24,6 +30,37 @@ export const App: React.FC = () => {
   const [runningSequences, setRunningSequences] = useState(0);
   const [waitingSequences, setWaitingSequences] = useState(0);
 
+  // Prefix sharing.
+  const [blockOwners, setBlockOwners] = useState<Record<string, number[]>>({});
+  const [totalBlocks, setTotalBlocks] = useState(0);
+  const [sharedBlocks, setSharedBlocks] = useState(0);
+  const [blocksSaved, setBlocksSaved] = useState(0);
+  const [memorySavedMb, setMemorySavedMb] = useState(0);
+  const [prefixHitRate, setPrefixHitRate] = useState(0);
+  const [cachedPrefixBlocks, setCachedPrefixBlocks] = useState(0);
+  const [prefixSharingEnabled, setPrefixSharingEnabled] = useState(true);
+
+  // Connection + capacity, for the status banner.
+  const [connection, setConnection] = useState<ConnectionState>('connecting');
+  const [engineReady, setEngineReady] = useState<boolean | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [inFlight, setInFlight] = useState<number | undefined>(undefined);
+  const [maxConcurrency, setMaxConcurrency] = useState<number | undefined>(undefined);
+  const [lastUpdate, setLastUpdate] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  // The engine stores no history, so the chart series are accumulated here.
+  const [samples, setSamples] = useState<TelemetrySample[]>([]);
+  const [timings, setTimings] = useState<RequestTiming[]>([]);
+
+  // Per-run timing, measured client-side: the server's own TTFT excludes
+  // transport, and inter-token latency is not reported at all.
+  const runStartRef = useRef<number | null>(null);
+  const firstTokenRef = useRef<number | null>(null);
+  const lastTokenRef = useRef<number | null>(null);
+  const interTokenGapsRef = useRef<number[]>([]);
+  const runSeqRef = useRef<number>(0);
+
   // Per-run state, driven by the /ws/stream feed.
   const [tokens, setTokens] = useState<StreamToken[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -40,19 +77,63 @@ export const App: React.FC = () => {
   useEffect(() => {
     const telemetry = new TelemetryClient();
     telemetry.connect((event: TelemetryEvent) => {
+      setConnection('live');
+      setLastUpdate(Date.now());
+
+      // Before the model finishes loading, telemetry is null and ready /
+      // load_error carry the state instead. That is a legitimate phase on a
+      // cold server, not an error.
       if (!event.telemetry) {
-        if (event.load_error) setError(`engine failed to load: ${event.load_error}`);
+        if (typeof event.ready === 'boolean') setEngineReady(event.ready);
+        if (event.load_error) {
+          setLoadError(event.load_error);
+          setError(`engine failed to load: ${event.load_error}`);
+        }
         return;
       }
-      setTokensPerSec(event.telemetry.tokens_per_second);
-      setTokensPerForwardPass(event.telemetry.tokens_per_forward_pass);
-      setMemoryUtilization(event.telemetry.memory_utilization);
-      setRunningSequences(event.telemetry.running_sequences);
-      setWaitingSequences(event.telemetry.waiting_sequences);
-      setBlockSize(event.telemetry.block_size);
+
+      const t = event.telemetry;
+      setEngineReady(true);
+      setTokensPerSec(t.tokens_per_second);
+      setTokensPerForwardPass(t.tokens_per_forward_pass);
+      setMemoryUtilization(t.memory_utilization);
+      setRunningSequences(t.running_sequences);
+      setWaitingSequences(t.waiting_sequences);
+      setBlockSize(t.block_size);
       if (event.occupancy) setOccupancy(event.occupancy);
+
+      setBlockOwners(t.block_owners ?? {});
+      setTotalBlocks(t.total_blocks);
+      setSharedBlocks(t.shared_blocks);
+      setBlocksSaved(t.blocks_saved);
+      setMemorySavedMb(t.memory_saved_mb);
+      setPrefixHitRate(t.prefix_hit_rate);
+      setCachedPrefixBlocks(t.cached_prefix_blocks);
+      setPrefixSharingEnabled(t.prefix_sharing_enabled);
+      setInFlight(t.in_flight);
+      setMaxConcurrency(t.max_concurrency);
+
+      setSamples((prev) =>
+        [
+          ...prev,
+          {
+            t: Date.now(),
+            tokensPerSecond: t.tokens_per_second,
+            tokensPerForwardPass: t.tokens_per_forward_pass,
+            runningSequences: t.running_sequences,
+            memoryUtilization: t.memory_utilization,
+          },
+        ].slice(-MAX_SAMPLES)
+      );
     });
     return () => telemetry.disconnect();
+  }, []);
+
+  // Drives the "last update Ns ago" staleness hint without re-rendering on
+  // every frame.
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
   // Token stream.
@@ -65,20 +146,60 @@ export const App: React.FC = () => {
             setTokens([]);
             setError(null);
             break;
-          case 'token':
+          case 'token': {
+            const at = performance.now();
+            if (firstTokenRef.current === null) {
+              firstTokenRef.current = at;
+            } else if (lastTokenRef.current !== null) {
+              // Inter-token latency is not reported by the server; it is the
+              // gap between consecutive token events, measured here.
+              interTokenGapsRef.current.push(at - lastTokenRef.current);
+            }
+            lastTokenRef.current = at;
+            if (typeof event.seq_id === 'number') runSeqRef.current = event.seq_id;
+
             setTokens((prev) => [...prev, { token: event.token, source: event.source }]);
             if (event.metrics) {
               setTokensPerSec(event.metrics.tokens_per_second);
               setTokensPerForwardPass(event.metrics.tokens_per_forward_pass);
               setMemoryUtilization(event.metrics.memory_utilization);
               setRunningSequences(event.metrics.running_sequences);
+              setInFlight(event.metrics.in_flight);
+              setMaxConcurrency(event.metrics.max_concurrency);
             }
             break;
-          case 'done':
+          }
+          case 'done': {
             setIsStreaming(false);
             setAcceptanceRate(event.acceptance_rate ?? null);
             setTokensPerTargetPass(event.tokens_per_target_pass ?? null);
+
+            // TTFT measured from the client, which is the latency a user
+            // actually experiences; the server figure excludes transport.
+            const start = runStartRef.current;
+            const first = firstTokenRef.current;
+            if (start !== null && first !== null) {
+              const gaps = interTokenGapsRef.current;
+              setTimings((prev) =>
+                [
+                  ...prev,
+                  {
+                    seqId: runSeqRef.current || prev.length + 1,
+                    ttftMs: first - start,
+                    meanInterTokenMs: gaps.length
+                      ? gaps.reduce((a, b) => a + b, 0) / gaps.length
+                      : null,
+                    tokens: event.generated_tokens,
+                  },
+                ].slice(-50)
+              );
+            }
+            runStartRef.current = null;
+            firstTokenRef.current = null;
+            lastTokenRef.current = null;
+            interTokenGapsRef.current = [];
             break;
+          }
           case 'error':
             setIsStreaming(false);
             setError(event.message);
@@ -87,6 +208,7 @@ export const App: React.FC = () => {
       },
       () => {
         setIsStreaming(false);
+        setConnection('reconnecting');
         setError('lost connection to the engine');
       }
     );
@@ -109,9 +231,14 @@ export const App: React.FC = () => {
           device: described.device ?? 'unknown',
           speculativeAvailable: health.speculative_available,
         });
+        setEngineReady(health.engine_ready);
+        setLoadError(health.load_error);
         if (health.load_error) setError(`engine failed to load: ${health.load_error}`);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) {
+          setConnection('disconnected');
+          setError(e instanceof Error ? e.message : String(e));
+        }
       }
     })();
     return () => {
@@ -126,6 +253,10 @@ export const App: React.FC = () => {
       setTokensPerTargetPass(null);
       setError(null);
       setIsStreaming(true);
+      runStartRef.current = performance.now();
+      firstTokenRef.current = null;
+      lastTokenRef.current = null;
+      interTokenGapsRef.current = [];
       streamRef.current?.sendPrompt({ prompt, maxTokens, useSpeculative });
     },
     [useSpeculative]
@@ -189,6 +320,15 @@ export const App: React.FC = () => {
         </div>
       </header>
 
+      <StatusBanner
+        connection={connection}
+        engineReady={engineReady}
+        loadError={loadError}
+        inFlight={inFlight}
+        maxConcurrency={maxConcurrency}
+        secondsSinceUpdate={lastUpdate === null ? undefined : (now - lastUpdate) / 1000}
+      />
+
       {error && (
         <div
           className="glass-card"
@@ -219,6 +359,20 @@ export const App: React.FC = () => {
       />
 
       <MemoryVisualizer occupancy={occupancy} blockSize={blockSize} />
+
+      <PrefixVisualizer
+        blockOwners={blockOwners}
+        totalBlocks={totalBlocks || occupancy.length}
+        blockSize={blockSize}
+        sharedBlocks={sharedBlocks}
+        blocksSaved={blocksSaved}
+        memorySavedMb={memorySavedMb}
+        prefixHitRate={prefixHitRate}
+        cachedPrefixBlocks={cachedPrefixBlocks}
+        enabled={prefixSharingEnabled}
+      />
+
+      <BenchmarkView samples={samples} timings={timings} />
 
       <SpeculativeDiff
         tokens={tokens}

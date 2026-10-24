@@ -19,6 +19,40 @@
   --font-mono: 'Fira Code', monospace;
 }
 
+/*
+ * Light theme, for presentations and projectors where the dark glassmorphism
+ * washes out. Every component reads these variables rather than hardcoding a
+ * hex, which is what makes this a token override instead of a rewrite.
+ *
+ * Applied by setting data-theme="light" on <html>; StatusBanner toggles it.
+ * The accents are darkened rather than reused: the neon cyan/emerald that reads
+ * well on #0a0d14 fails contrast badly on a light background.
+ */
+:root[data-theme='light'] {
+  --bg-primary: #f6f8fb;
+  --bg-secondary: #eef2f7;
+  --bg-card: rgba(255, 255, 255, 0.82);
+  --border-color: rgba(15, 23, 42, 0.12);
+  --border-highlight: rgba(0, 140, 110, 0.35);
+
+  --accent-cyan: #0369a1;
+  --accent-emerald: #047857;
+  --accent-purple: #6d28d9;
+  --accent-red: #be123c;
+  --accent-amber: #b45309;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+}
+
+/* The body gradient is defined with literal colours, so it needs its own override. */
+:root[data-theme='light'] body {
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(3, 105, 161, 0.07) 0%, transparent 40%),
+    radial-gradient(circle at 85% 85%, rgba(109, 40, 217, 0.07) 0%, transparent 40%);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -117,4 +151,22 @@ body {
 .block-cell:hover {
   transform: scale(1.4);
   z-index: 10;
+}
+
+/* Spinner for in-progress states (connecting, reconnecting, model loading). */
+@keyframes memforge-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: memforge-spin 1s linear infinite;
+}
+
+/* Respect a reduced-motion preference: the state is conveyed by the label and
+   colour as well, so the rotation is decoration and can simply stop. */
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
 }
