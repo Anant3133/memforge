@@ -29,15 +29,24 @@ graph TD
         N6["2 Scheduler Bugs Fixed (block leak, queue block)"]
     end
 
-    subgraph S3["Next Phases (see PROGRESS_AND_NEXT_PHASES.md)"]
+    subgraph S3["Completed in the Prefix Sharing Phase (2026-10-24)"]
+        B1["Chained Prefix Hashing & Block Registry (C++)"]
+        B2["Copy-on-Write Write Guard"]
+        B3["Partial Prefill over Cached Prefixes"]
+        B4["HTTP Disconnect -> Scheduler Abort"]
+        B5["Backpressure (429) & /metrics Endpoint"]
+        B6["EngineCore Dead Header Removed"]
+    end
+
+    subgraph S4["Next Phases (see PROGRESS_AND_NEXT_PHASES.md)"]
         P1["A: Fused paged-attention kernel"]
-        P2["B: Prefix sharing (copy-on-write)"]
         P3["C: Chunked prefill"]
         P4["D: Speculation inside continuous batching"]
         P5["E: GPU execution path"]
+        P6["F: Sustained load testing & structured logging"]
     end
 
-    S1 --> S2 --> S3
+    S1 --> S2 --> S3 --> S4
 ```
 
 ---
@@ -126,6 +135,8 @@ measured results, known limitations and the next phases.
 | Speculative decoding is lossless | **Verified** — greedy speculative == greedy target, exactly |
 | Speculative decoding 2-3x speedup | **Not demonstrated.** 0.58x on this CPU/model pair; see the report for why |
 | Physical block leaks | **None** across every scenario; free + allocated == total |
+| Prefix sharing memory win (8 requests, 512-token shared prompt) | **5.7x fewer blocks** (272 → 48; 340 MB → 60 MB KV), output byte-identical. Goal said "roughly 1/8"; measured 1/5.7 — see [§10.4](PROGRESS_AND_NEXT_PHASES.md) |
+| Prefix sharing compute win | **7.3x fewer prefill tokens** (4152 → 568), **3.8x faster TTFT** (25.5 s → 6.8 s) at 8 concurrent |
 
 ### 3.3 Bugs fixed in the C++ core
 
@@ -163,10 +174,13 @@ bridge, and the API. All 7 pipeline stages pass via `python scripts/run_pipeline
 - [x] Frontend wired to live endpoints; typecheck and production build green
 - [x] Baseline and optimization metrics recorded in `benchmarks/results/live_engine.json`
 - [ ] Fused paged-attention kernel (Phase A)
-- [ ] Prefix sharing via copy-on-write (Phase B)
+- [x] Prefix sharing via copy-on-write (Phase B) — **done 2026-10-24**, see
+      [PROGRESS_AND_NEXT_PHASES.md](PROGRESS_AND_NEXT_PHASES.md) §10
 - [ ] Chunked prefill (Phase C)
 - [ ] Speculative decoding inside continuous batching (Phase D)
 - [ ] GPU execution path exercised (Phase E)
+- [~] Production hardening (Phase F) — disconnect propagation, backpressure and
+      `/metrics` done; sustained load testing and structured logging outstanding
 
 Next phases are specified with definitions of done in
 [PROGRESS_AND_NEXT_PHASES.md](PROGRESS_AND_NEXT_PHASES.md#8-next-phases).

@@ -309,14 +309,23 @@ These are deliberate scope boundaries, not unknowns:
 4. **Speculative decoding is single-sequence**, serialized behind a lock, and not
    integrated with the continuous-batching scheduler. The two optimizations cannot
    currently be used together.
-5. **No prefix sharing.** `PhysicalBlock` carries a `ref_count` and the allocator
-   maintains it, but nothing yet shares blocks between sequences, so a common
-   system prompt is stored once per request.
+5. ~~**No prefix sharing.**~~ **Resolved 2026-10-24 (Phase B).** Sequences with a
+   common prompt prefix now point at the same physical blocks. See section 10.
 6. **CPU only.** No CUDA device has been exercised; `fp16`/device placement paths
    exist but are untested.
-7. **`EngineCore`** is declared in `engine/include/memforge/engine_core.hpp` with
-   no implementation. Python orchestrates the allocator and scheduler directly, so
-   the header is currently dead weight — implement it or delete it.
+7. ~~**`EngineCore`** is declared with no implementation.~~ **Resolved
+   2026-10-24: deleted.** The header declared a class with no definition
+   anywhere, bound nothing to Python, and was reachable only through an unused
+   `#include` in `bindings.cpp` — which is the only reason the link ever
+   succeeded. The decision to delete rather than implement: orchestration has to
+   call `model.forward()`, so it has to be in Python, and a C++ `EngineCore`
+   could only wrap `Scheduler` + `BlockAllocator` — which
+   `ContinuousBatchingEngine.__init__` already composes directly in two lines.
+   Implementing it would have added a second orchestration path that nothing
+   exercises, and unexercised duplicate paths rot. Verified before removal: no
+   `engine_core.cpp` existed, and `EngineConfig` lives in `types.hpp` (still
+   bound), so nothing else went with it. The C++ core did not shrink — it gained
+   `prefix_cache.cpp` in the same change.
 
 ---
 
@@ -338,17 +347,23 @@ long context.
   context — the current comparison only holds at ~40 tokens — and
   `benchmarks/run_live_engine.py` reports it across a context sweep.
 
-### Phase B — Prefix sharing via copy-on-write
+### Phase B — Prefix sharing via copy-on-write ✅ **DONE 2026-10-24**
 
-The ref-counting infrastructure already exists and is unused. This is the highest
-memory win still on the table.
+Implemented. Measured results and design notes in section 10 below.
 
-- Hash prompt prefixes block-by-block; point identical logical blocks at one
-  physical block and bump `ref_count`.
-- Copy-on-write when a shared block must be written.
+- ~~Hash prompt prefixes block-by-block; point identical logical blocks at one
+  physical block and bump `ref_count`.~~ Done — with a *chained* hash, see §10.1.
+- ~~Copy-on-write when a shared block must be written.~~ Done as a guard; with
+  full-block-only sharing it is currently unreachable in the live path, which
+  §10.3 explains and a test pins.
 - **Done when:** 8 requests sharing a 512-token system prompt allocate roughly
   1/8th the blocks of today, with byte-identical output, and the dashboard shows
-  the shared blocks.
+  the shared blocks. — **Substantially met, with the number reported as
+  measured: 1/5.7, not 1/8.** 272 blocks → 48. The remaining gap is each
+  sequence's private tail blocks, which are private by design; §10.4 has the
+  arithmetic. Output is byte-identical at every concurrency level. The sharing
+  telemetry keys are served; the visualizer component itself is Track 4's
+  deliverable.
 
 ### Phase C — Chunked prefill and prefill/decode fusion
 
@@ -375,17 +390,27 @@ memory win still on the table.
 - **Done when:** `benchmarks/results/` holds a GPU report and the README states
   both sets of numbers.
 
-### Phase F — Production hardening
+### Phase F — Production hardening *(partially done 2026-10-24)*
 
-- Request cancellation on client disconnect all the way into the scheduler (the
-  WebSocket path aborts; HTTP disconnects are not yet detected).
-- Structured logging and a `/metrics` endpoint.
-- Load testing for concurrency limits and backpressure when the queue saturates.
-- Memory-leak profiling under sustained load (AddressSanitizer on the C++ side).
-- Decide `EngineCore`'s fate: implement it as the C++ orchestrator the plan
-  describes, or delete the header.
+- [x] Request cancellation on client disconnect all the way into the scheduler.
+      Both paths now: SSE relied on Starlette closing the generator (now covered
+      by a test that asserts the blocks come back), and the non-streaming path,
+      which previously did not notice a hangup at all, races the work against
+      the connection via `server/api/disconnect_handler.py`.
+- [x] A `/metrics` endpoint — plain-text Prometheus, including
+      `memforge_blocks_leaked` as the never-nonzero invariant. Structured
+      logging is still outstanding.
+- [x] Backpressure when the queue saturates. `max_concurrency` had been in
+      `ServerConfig` since the server was written and was read by nothing; it is
+      now enforced under the submit lock and returns 429 with `Retry-After`
+      rather than holding the connection open.
+- [x] Decide `EngineCore`'s fate — deleted, see limitation 7 above.
+- [ ] Load testing at scale (Track 1 owns the stress harness; `/metrics` is its
+      scrape target).
+- [ ] Memory-leak profiling under sustained load (AddressSanitizer on the C++
+      side).
 - **Done when:** the server survives a sustained multi-client load test with flat
-  memory and no leaked blocks.
+  memory and no leaked blocks. — *Not yet claimed; needs Track 1's harness.*
 
 ---
 
@@ -403,3 +428,151 @@ Phases 2–4 were previously marked complete on the strength of scaffolding and
 simulated benchmarks. They are now complete on the strength of real weights and
 differential tests — with the speculative speedup claim explicitly downgraded to
 "mechanism verified, speedup not demonstrated at this scale".
+
+---
+
+## 10. Phase B — prefix sharing via copy-on-write (2026-10-24)
+
+A common system prompt used to be stored once per request. It is now stored
+once. The `ref_count` field on `PhysicalBlock` had existed since the first
+commit and nothing ever incremented it; this is what finally uses it.
+
+Track 3 work. Design detail and the per-item reasoning are in
+[ANANT_WORKPLAN.md](ANANT_WORKPLAN.md).
+
+### 10.1 Why the hash is chained, and why it is verified
+
+A block's Keys and Values are a function of **every token before it**, because
+attention is causal and cumulative. So the hash that identifies a shareable
+block must cover the whole prefix, not just that block's own tokens:
+
+```
+h(0) = mix(0,      tokens[0:16])
+h(i) = mix(h(i-1), tokens[16i:16i+16])
+```
+
+Hashing a block in isolation would match two sequences that happen to share a
+middle fragment but diverge earlier, and hand the second one Keys and Values
+computed for a different context. That failure produces *fluent, confident,
+wrong output* — no crash, no exception, nothing a smoke test would catch. It is
+the single most dangerous bug available in this design, which is why the chained
+form is treated as the correctness argument rather than an implementation
+detail, and why every test in `test_prefix_sharing.py` asserts byte-identical
+token ids instead of similar text.
+
+Lookups also **verify the stored token ids** rather than trusting the hash. A
+64-bit collision is vanishingly unlikely, but "vanishingly unlikely" combined
+with "silently serves the wrong KV cache" is a bad trade; 16 `int32` is 64 bytes
+and the comparison is free next to a forward pass, so the entire collision
+failure mode is removed rather than merely made improbable. No xxHash or Murmur
+dependency was added — the hash is a chained splitmix64/FNV-1a hybrid in the
+header, and its output is verified anyway.
+
+Only **full** blocks are registered. A partially filled block is still being
+written to, so its contents are not final and its hash is not yet meaningful.
+A prompt's trailing block therefore always stays private, which is what keeps
+the decode path copy-on-write-free: decode only ever writes that trailing block.
+
+### 10.2 One thing that is not obvious until you measure it
+
+A burst of identical prompts all reach admission **before any of them has
+prefilled**, so the registry is still empty and every one of them misses. The
+first implementation shared nothing at all on exactly the workload it was built
+for. Registering at admission instead would be worse than useless — a sequence
+would be handed blocks whose KV has not been written yet, and would read zeros.
+
+The scheduler now tracks the first-block hashes of the fresh prefills it admits
+within a step and defers a later request carrying the same prefix by one step,
+so the first one prefills and registers and the rest share it. It *breaks*
+rather than skips, keeping the waiting queue FIFO so nothing can starve, and
+requests with different prefixes are untouched — verified: 8 all-distinct
+prompts still admit in a single step and allocate exactly as many blocks as
+before. The cost is one extra admission step, paid once per new prefix.
+
+### 10.3 Copy-on-write is a guard, not a hot path
+
+Because only full blocks are shared and decode only writes the trailing private
+block, `prepare_write()` returns "already private" every single time in normal
+operation, and a test asserts `cow_copies == 0` across a real run. The guard is
+implemented anyway: the alternative to an unreachable guard is an unprotected
+invariant, and anything that later shares a non-final block — partial-block
+sharing, a scheduler change — would silently corrupt a live prefix. A separate
+test induces the sharing deliberately to prove the copy itself works.
+
+### 10.4 Measured results
+
+Real weights, CPU-only, `SmolLM2-360M-Instruct`, fp32, block size 16, 600-block
+pool. Each request is a **512-token shared system prompt** plus a short distinct
+tail (519 tokens total), generating 12 tokens. Reproduce with
+`python benchmarks/run_prefix_sharing.py`; raw output in
+`benchmarks/results/prefix_sharing.json`.
+
+| Concurrent requests | Peak blocks off → on | Block ratio | Peak KV MB off → on | Prefill tokens off → on | Median TTFT off → on | Wall off → on |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 34 → 34 | 1.000 | 42.5 → 42.5 | 519 → 519 | 5135 → 5273 ms | 7.68 → 7.34 s |
+| 2 | 68 → 36 | 0.529 | 85.0 → 45.0 | 1038 → 526 | 9515 → 6011 ms | 17.70 → 11.50 s |
+| 4 | 136 → 40 | 0.294 | 170.0 → 50.0 | 2076 → 540 | 14326 → 6065 ms | 29.40 → 15.91 s |
+| 8 | **272 → 48** | **0.176** | **340.0 → 60.0** | **4152 → 568** | **25546 → 6787 ms** | **54.07 → 21.28 s** |
+
+At 8 concurrent requests: **5.7x fewer physical blocks** (340 MB of KV down to
+60 MB), **7.3x fewer prefill tokens**, **3.8x faster time to first token**, and
+**2.5x lower wall-clock**. Prefix-cache hit rate 0.991.
+
+**Output was byte-identical to the non-sharing engine at every concurrency
+level**, and `free + allocated == total` held throughout with zero leaked blocks
+on both paths.
+
+#### The definition of done said "roughly 1/8th". It is 1/5.7, and that is the floor.
+
+The Phase B target was "8 requests sharing a 512-token system prompt allocate
+roughly 1/8th the blocks". The measured figure is 0.176, not 0.125, and the gap
+is structural rather than a shortfall in the implementation:
+
+```
+519-token prompt + 12 generated  = 34 blocks per sequence
+  blocks 0..31  (512 tokens)     = shareable, stored once      -> 32
+  block 32      (7 tokens, partial)  private per sequence      -> 8
+  block 33      (generated tokens)   private per sequence      -> 8
+                                                        total  -> 48
+```
+
+A clean 1/8 would be 34 blocks, which requires sharing each sequence's partial
+tail block as well. Those blocks are private *by design* — a block still being
+written to has no final contents and therefore no meaningful hash (§10.1), and
+keeping them private is what makes the decode path copy-on-write-free (§10.3).
+Partial-block sharing would close most of the remaining gap and is listed in
+§10.5 as the follow-up it is. So: the mechanism meets the intent of the goal and
+the win compounds with concurrency exactly as predicted, but the specific 1/8
+number was not reachable under the design actually shipped, and is reported as
+measured rather than rounded toward the target.
+
+Three further things worth reading off the table:
+
+1. **The memory win compounds with concurrency**, because the shared prefix is
+   paid for once however many requests want it. The unshared path needs 272 of
+   the pool's 600 blocks for 8 requests; the shared path needs 48.
+2. **It is also a compute win, which the original Phase B framing understated.**
+   A hit means the prefix's KV is already resident, so partial prefill skips it:
+   4152 prefill tokens become 568. That, not the memory saving, is where the
+   3.8x TTFT improvement comes from.
+3. **N=1 is break-even, not a regression** — 34 blocks either way, and the 2.7%
+   TTFT difference is single-run CPU noise on a 5-second measurement, not a
+   signal. With one request there is nothing to share and the hashing does not
+   show up. Reported rather than hidden, in keeping with the N=1
+   continuous-batching row in §3.2.
+
+### 10.5 Deliberately not done
+
+- **Zero-reference retention with LRU eviction.** A registry entry currently
+  lives exactly as long as some sequence references its block; when the last
+  reference drops, the entry is evicted so a recycled physical block can never
+  be served for stale content. That is simple and impossible to get wrong, and
+  it is enough for the concurrent-request case the Phase B goal describes. It
+  does mean a system prompt goes cold between requests rather than staying warm,
+  which is where prefix caching pays off hardest in real serving. Retaining
+  zero-ref entries and evicting LRU under pressure is the natural follow-up and
+  is where the subtle bugs live, so it was kept out of this change.
+- **Partial-block sharing.** Would raise the hit rate and is the main reason the
+  ratio floor is ~1/6 rather than ~1/8 at N=8 (each sequence keeps a private
+  tail block). Needs the CoW path in §10.3 to become live, which is precisely
+  why that path was built now.

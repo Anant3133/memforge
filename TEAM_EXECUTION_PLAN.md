@@ -1,7 +1,8 @@
 # MemForge: Team Work Allocation, Modular Architecture & Sprint Roadmap
 
 **Project:** MemForge — Paged KV-Cache & Continuous Batching Inference Engine  
-**Alignment:** Aligned with [PROGRESS_AND_NEXT_PHASES.md](file:///Users/ashutoshsharma/memforge/PROGRESS_AND_NEXT_PHASES.md) and [CURRENT_STATUS.md](file:///Users/ashutoshsharma/memforge/CURRENT_STATUS.md)  
+**Alignment:** Aligned with [PROGRESS_AND_NEXT_PHASES.md](PROGRESS_AND_NEXT_PHASES.md) and [CURRENT_STATUS.md](CURRENT_STATUS.md)
+**Per-track detail:** [ANANT_WORKPLAN.md](ANANT_WORKPLAN.md) (Track 3)  
 **Document Owner:** Engineering Lead  
 **Last Updated:** October 2026  
 
@@ -104,7 +105,15 @@ graph TD
      - When a sequence writes to a shared block during generation, allocate a private block and copy existing data.
   3. **Scheduler Disconnect Propagation**:
      - Detect HTTP client disconnects (via FastAPI request state) and invoke sequence abortion in the engine scheduler.
-  4. **EngineCore Cleanup**:
+  4. **EngineCore Cleanup** — *resolved 2026-10-24: the header was deleted.*
+     It declared a class with no implementation anywhere, bound nothing to
+     Python, and was reachable only through an unused `#include`. Python owns
+     orchestration because orchestration has to call `model.forward()`; a C++
+     `EngineCore` could only wrap `Scheduler` + `BlockAllocator`, which
+     `ContinuousBatchingEngine` already composes directly, so it would have been
+     a second orchestration path that nothing exercises. Rationale recorded in
+     [PROGRESS_AND_NEXT_PHASES.md](PROGRESS_AND_NEXT_PHASES.md).
+     Original scope, for the record:
      - Implement clean C++ orchestration or deprecate the placeholder header safely.
 * **Definition of Done**:
   - 8 concurrent requests sharing a 512-token prompt consume ~1/8th the physical blocks of today.
@@ -217,8 +226,19 @@ To prevent teammates from waiting on each other, modules will communicate via fi
 |    }                                                                              |
 |                                                                                   |
 | 3. Prefix Cache Engine Contract (for Anant & Akshit):                             |
-|    - compute_block_hash(token_ids: List[int]) -> uint64                           |
-|    - find_or_allocate_shared(hash: uint64) -> (physical_block_id, is_hit: bool)  |
+|    AS SHIPPED 2026-10-24. The hash takes a PARENT HASH as well as the tokens:     |
+|    a block's KV depends on every token before it, so a per-block hash would       |
+|    match sequences that share a fragment but diverge earlier and hand back the    |
+|    wrong KV. Chaining is the correctness argument, not an optimisation.           |
+|    - hash_block(parent_hash: int, tokens: List[int]) -> int   # never 0           |
+|    - PrefixCache.acquire_shared_prefix(tokens) -> List[BlockId]                   |
+|    - PrefixCache.release_acquired(block_ids) -> None   # admission-failure path   |
+|    - PrefixCache.register_full_blocks(tokens, block_table) -> int                 |
+|    - PrefixCache.evict(released: List[BlockId]) -> None                           |
+|    - BlockAllocator.add_ref(block_id) -> bool                                     |
+|    - BlockAllocator.release(block_ids) -> List[BlockId]  # only those hitting 0   |
+|    - BlockAllocator.prepare_write(seq, logical_index) -> (old, new) | None        |
+|    - SequenceStepInfo.num_cached_tokens: int   # prefill offset for the ML layer  |
 +-----------------------------------------------------------------------------------+
 ```
 
