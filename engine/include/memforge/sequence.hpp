@@ -28,6 +28,9 @@ public:
     // Logical-to-Physical Block Table
     const std::vector<BlockId>& get_block_table() const { return block_table_; }
     void add_block(BlockId physical_block_id);
+    /// Repoint one logical block at a different physical block. Used by
+    /// copy-on-write, which swaps a shared block for a private copy.
+    void set_block(size_t logical_index, BlockId physical_block_id);
     void clear_blocks();
     size_t get_num_required_blocks() const;
     size_t get_num_allocated_blocks() const { return block_table_.size(); }
@@ -40,7 +43,15 @@ public:
     // Prefill tracking
     bool has_completed_prefill() const { return has_completed_prefill_; }
     void mark_prefill_completed() { has_completed_prefill_ = true; }
-    void reset_prefill() { has_completed_prefill_ = false; }
+    /// Reset for preempt-by-recompute. Also clears the cached-prefix count: a
+    /// preempted sequence released its blocks, so nothing of it is resident any
+    /// more and the next admission must re-run the prefix lookup from scratch.
+    void reset_prefill() { has_completed_prefill_ = false; num_cached_tokens_ = 0; }
+
+    // Prefix sharing: leading tokens whose KV came from a prefix-cache hit and
+    // must therefore NOT be recomputed (or rewritten) by the prefill pass.
+    size_t get_num_cached_tokens() const { return num_cached_tokens_; }
+    void set_num_cached_tokens(size_t n) { num_cached_tokens_ = n; }
 
 private:
     SequenceId id_;
@@ -51,6 +62,7 @@ private:
     size_t block_size_{DEFAULT_BLOCK_SIZE};
     SequenceStatus status_{SequenceStatus::WAITING};
     bool has_completed_prefill_{false};
+    size_t num_cached_tokens_{0};
 };
 
 using SequencePtr = std::shared_ptr<Sequence>;

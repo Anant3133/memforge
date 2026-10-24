@@ -5,7 +5,7 @@
 #include "memforge/sequence.hpp"
 #include "memforge/block_allocator.hpp"
 #include "memforge/scheduler.hpp"
-#include "memforge/engine_core.hpp"
+#include "memforge/prefix_cache.hpp"
 
 namespace py = pybind11;
 using namespace memforge;
@@ -31,7 +31,8 @@ PYBIND11_MODULE(memforge_c, m) {
         .def_readwrite("output_length", &SequenceStepInfo::output_length)
         .def_readwrite("total_length", &SequenceStepInfo::total_length)
         .def_readwrite("status", &SequenceStepInfo::status)
-        .def_readwrite("is_prefill", &SequenceStepInfo::is_prefill);
+        .def_readwrite("is_prefill", &SequenceStepInfo::is_prefill)
+        .def_readwrite("num_cached_tokens", &SequenceStepInfo::num_cached_tokens);
 
     // SchedulerStepResult struct
     py::class_<SchedulerStepResult>(m, "SchedulerStepResult")
@@ -71,6 +72,8 @@ PYBIND11_MODULE(memforge_c, m) {
         .def("get_num_required_blocks", &Sequence::get_num_required_blocks)
         .def("has_completed_prefill", &Sequence::has_completed_prefill)
         .def("reset_prefill", &Sequence::reset_prefill)
+        .def("get_num_cached_tokens", &Sequence::get_num_cached_tokens)
+        .def("set_num_cached_tokens", &Sequence::set_num_cached_tokens)
         .def("is_finished", &Sequence::is_finished)
         .def("finish", &Sequence::finish);
 
@@ -89,7 +92,43 @@ PYBIND11_MODULE(memforge_c, m) {
         .def("free_sequence", &BlockAllocator::free_sequence)
         .def("ensure_capacity", &BlockAllocator::ensure_capacity)
         .def("get_utilization_ratio", &BlockAllocator::get_utilization_ratio)
-        .def("reset", &BlockAllocator::reset);
+        .def("reset", &BlockAllocator::reset)
+        // Prefix sharing. `release` returns only the ids that actually reached
+        // ref_count 0, which the caller must pass to PrefixCache.evict().
+        .def("add_ref", &BlockAllocator::add_ref, py::arg("block_id"))
+        .def("release", &BlockAllocator::release, py::arg("block_ids"))
+        .def("prepare_write", &BlockAllocator::prepare_write,
+             py::arg("seq"), py::arg("logical_index"),
+             "Copy-on-write guard. Returns (old_block, new_block) when the block "
+             "was shared and has been replaced by a private copy the caller must "
+             "populate, or None when it was already private.")
+        .def("get_ref_count", &BlockAllocator::get_ref_count, py::arg("block_id"))
+        .def("get_num_shared_blocks", &BlockAllocator::get_num_shared_blocks)
+        .def("get_num_blocks_saved", &BlockAllocator::get_num_blocks_saved);
+
+    // PrefixCache: chained prefix hashing and the hash -> physical registry
+    py::class_<PrefixCache, std::shared_ptr<PrefixCache>>(m, "PrefixCache")
+        .def(py::init<std::shared_ptr<BlockAllocator>, size_t>(),
+             py::arg("allocator"), py::arg("block_size") = DEFAULT_BLOCK_SIZE)
+        .def("acquire_shared_prefix", &PrefixCache::acquire_shared_prefix, py::arg("tokens"))
+        .def("release_acquired", &PrefixCache::release_acquired, py::arg("block_ids"))
+        .def("register_full_blocks", &PrefixCache::register_full_blocks,
+             py::arg("tokens"), py::arg("block_table"))
+        .def("evict", &PrefixCache::evict, py::arg("released"))
+        .def("clear", &PrefixCache::clear)
+        .def("num_cached_blocks", &PrefixCache::num_cached_blocks)
+        .def("num_hits", &PrefixCache::num_hits)
+        .def("num_misses", &PrefixCache::num_misses)
+        .def("hit_rate", &PrefixCache::hit_rate)
+        .def("get_block_size", &PrefixCache::get_block_size);
+
+    m.def("hash_block", [](uint64_t parent_hash, const std::vector<TokenId>& tokens) {
+              return hash_block(parent_hash, tokens.data(), tokens.size());
+          },
+          py::arg("parent_hash"), py::arg("tokens"),
+          "Chained prefix hash of one token block. `parent_hash` is the preceding "
+          "block's hash (0 for the first block); chaining is what makes the hash "
+          "cover the whole prefix, which is required for correctness. Never 0.");
 
     // Scheduler class
     py::class_<Scheduler, std::shared_ptr<Scheduler>>(m, "Scheduler")

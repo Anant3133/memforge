@@ -4,6 +4,7 @@ set(ENGINE_SOURCES
     src/block_allocator.cpp
     src/sequence.cpp
     src/scheduler.cpp
+    src/prefix_cache.cpp
 )
 
 set(ENGINE_HEADERS
@@ -11,7 +12,7 @@ set(ENGINE_HEADERS
     include/memforge/block_allocator.hpp
     include/memforge/sequence.hpp
     include/memforge/scheduler.hpp
-    include/memforge/engine_core.hpp
+    include/memforge/prefix_cache.hpp
 )
 
 # Core C++ static library

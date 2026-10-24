@@ -9,6 +9,7 @@ cpp_sources = [
     "engine/src/block_allocator.cpp",
     "engine/src/sequence.cpp",
     "engine/src/scheduler.cpp",
+    "engine/src/prefix_cache.cpp",
     "engine/src/bindings.cpp",
 ]
 

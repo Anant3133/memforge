@@ -25,6 +25,12 @@ void Sequence::add_block(BlockId physical_block_id) {
     block_table_.push_back(physical_block_id);
 }
 
+void Sequence::set_block(size_t logical_index, BlockId physical_block_id) {
+    if (logical_index < block_table_.size()) {
+        block_table_[logical_index] = physical_block_id;
+    }
+}
+
 void Sequence::clear_blocks() {
     block_table_.clear();
 }

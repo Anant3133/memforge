@@ -33,6 +33,10 @@ struct PhysicalBlock {
     int ref_count{0};
     bool is_allocated{false};
     uint64_t last_accessed_timestamp{0};
+    /// Chained prefix hash this block is registered under in the PrefixCache,
+    /// or 0 when it is not shareable. `hash_block()` never returns 0, so the
+    /// sentinel is unambiguous.
+    uint64_t block_hash{0};
 };
 
 /**
@@ -46,6 +50,11 @@ struct SequenceStepInfo {
     size_t total_length{0};
     SequenceStatus status{SequenceStatus::WAITING};
     bool is_prefill{false}; // True if running initial prompt prefill, false if decoding single token
+    /// Leading tokens whose KV is already resident in the pool via a prefix-cache
+    /// hit, so the prefill forward pass must skip them and start at this offset.
+    /// 0 means "prefill the whole sequence", which is the pre-prefix-sharing
+    /// behaviour and what every non-sharing path reports.
+    size_t num_cached_tokens{0};
 };
 
 /**

@@ -6,5 +6,9 @@ target_link_libraries(test_block_allocator PRIVATE memforge_core)
 add_executable(test_scheduler test_scheduler.cpp)
 target_link_libraries(test_scheduler PRIVATE memforge_core)
 
+add_executable(test_prefix_cache test_prefix_cache.cpp)
+target_link_libraries(test_prefix_cache PRIVATE memforge_core)
+
 add_test(NAME test_block_allocator COMMAND test_block_allocator)
 add_test(NAME test_scheduler COMMAND test_scheduler)
+add_test(NAME test_prefix_cache COMMAND test_prefix_cache)

@@ -216,6 +216,12 @@ CPP_TEST_SUITES = {
         "engine/src/block_allocator.cpp",
         "engine/src/sequence.cpp",
     ],
+    "test_prefix_cache": [
+        "tests/cpp/test_prefix_cache.cpp",
+        "engine/src/prefix_cache.cpp",
+        "engine/src/block_allocator.cpp",
+        "engine/src/sequence.cpp",
+    ],
 }
 
 
