@@ -48,6 +48,37 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def _render_prompt(text: str, raw: bool) -> str:
+    """
+    Apply the model's chat template to a bare user message.
+
+    Without this, `/ws/stream` fed the user's text straight into an instruction
+    tuned model with no role markers, and SmolLM2-Instruct responds to that by
+    emitting EOS immediately -- one token, finish_reason "stop". The HTTP
+    endpoint has always applied the template via `_build_prompt`, so the two
+    paths produced wildly different output for the same text, and the dashboard
+    (which streams over the WebSocket) got the broken one.
+
+    `{"raw": true}` in the request bypasses this, for callers that want to send
+    a fully-formed prompt and control the formatting themselves.
+    """
+    if raw:
+        return text
+
+    tokenizer = ENGINE_MANAGER.tokenizer
+    if tokenizer is not None and getattr(tokenizer, "chat_template", None):
+        try:
+            return tokenizer.apply_chat_template(
+                [{"role": "user", "content": text}],
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+        except Exception:
+            pass
+    # No template available: a plain role-marked prompt still beats bare text.
+    return f"user: {text}\nassistant:"
+
+
 def _params_from(payload: Dict[str, Any]) -> SamplingParams:
     return SamplingParams(
         max_new_tokens=int(payload.get("max_new_tokens", SERVER_CONFIG.default_max_tokens)),
@@ -70,6 +101,7 @@ async def websocket_stream_endpoint(websocket: WebSocket):
 
             use_speculative = bool(payload.get("use_speculative", False))
             params = _params_from(payload)
+            rendered = _render_prompt(prompt, bool(payload.get("raw", False)))
 
             await websocket.send_json(
                 {
@@ -82,9 +114,9 @@ async def websocket_stream_endpoint(websocket: WebSocket):
 
             try:
                 if use_speculative:
-                    source = ENGINE_MANAGER.speculative_stream(prompt, params)
+                    source = ENGINE_MANAGER.speculative_stream(rendered, params)
                 else:
-                    source = ENGINE_MANAGER.stream(prompt, params)
+                    source = ENGINE_MANAGER.stream(rendered, params)
                 async for event in source:
                     await websocket.send_json(event)
             except Exception as exc:

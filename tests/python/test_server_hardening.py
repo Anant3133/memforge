@@ -296,6 +296,101 @@ def test_blocks_endpoint_exposes_block_owners(client, stub_engine):
         assert payload["occupancy"][int(block_str)] in owners
 
 
+# ------------------------------------------------- websocket prompt rendering
+
+def test_ws_stream_applies_the_chat_template(client, stub_engine, monkeypatch):
+    """
+    /ws/stream must role-mark the prompt the way the HTTP path does.
+
+    It used to pass the user's text straight into the model. For an
+    instruction-tuned model that means no role markers, and SmolLM2-Instruct
+    answers that by emitting EOS immediately -- one token, finish_reason
+    "stop". The HTTP endpoint has always applied the template, so the two paths
+    produced completely different output for the same input, and the dashboard
+    streams over the WebSocket, so it got the broken one.
+    """
+    captured = {}
+    original = ENGINE_MANAGER.stream
+
+    def spy(prompt, params):
+        captured["prompt"] = prompt
+        return original(prompt, params)
+
+    monkeypatch.setattr(ENGINE_MANAGER, "stream", spy)
+
+    with client.websocket_connect("/ws/stream") as ws:
+        ws.send_json({"prompt": "hello there", "max_new_tokens": 2})
+        while True:
+            event = ws.receive_json()
+            if event["type"] in ("done", "error"):
+                break
+
+    assert "prompt" in captured, "the engine was never asked to stream"
+    sent = captured["prompt"]
+    assert sent != "hello there", "the raw prompt reached the engine unrendered"
+    assert "hello there" in sent
+    # The stub tokenizer has no chat_template, so the fallback must still mark roles.
+    assert "user" in sent and "assistant" in sent
+
+
+def test_ws_stream_raw_flag_bypasses_the_template(client, stub_engine, monkeypatch):
+    """`raw: true` is the escape hatch for callers formatting their own prompt."""
+    captured = {}
+    original = ENGINE_MANAGER.stream
+
+    def spy(prompt, params):
+        captured["prompt"] = prompt
+        return original(prompt, params)
+
+    monkeypatch.setattr(ENGINE_MANAGER, "stream", spy)
+
+    with client.websocket_connect("/ws/stream") as ws:
+        ws.send_json({"prompt": "already formatted", "max_new_tokens": 2, "raw": True})
+        while True:
+            event = ws.receive_json()
+            if event["type"] in ("done", "error"):
+                break
+
+    assert captured["prompt"] == "already formatted"
+
+
+# ---------------------------------------------------- empty-prompt validation
+
+@pytest.mark.parametrize(
+    "url,body",
+    [
+        ("/v1/completions", {"prompt": "", "max_tokens": 2}),
+        ("/v1/completions", {"prompt": "   \t ", "max_tokens": 2}),
+        ("/v1/chat/completions", {"messages": [{"role": "user", "content": ""}], "max_tokens": 2}),
+        ("/v1/chat/completions", {"messages": [{"role": "user", "content": "  "}], "max_tokens": 2}),
+        ("/v1/chat/completions", {"messages": [], "max_tokens": 2}),
+    ],
+)
+def test_empty_prompts_are_rejected(client, stub_engine, url, body):
+    """
+    A prompt with nothing in it is a client error, not a generation request.
+
+    All five of these used to return 200: an empty `prompt` tokenizes to a
+    one-token sequence, and an empty chat message renders through the chat
+    template into "user: \\nassistant:", which is not empty. So the engine
+    generated from nothing and spent a scheduler slot and a block of KV cache
+    doing it. 400 rather than 422 because the body is well-formed -- it is the
+    content that is unusable.
+    """
+    response = client.post(url, json=body)
+    assert response.status_code == 400, response.text
+    assert "empty" in response.json()["detail"].lower()
+
+
+def test_valid_prompts_still_pass(client, stub_engine):
+    """The validation must not catch legitimate requests."""
+    assert client.post("/v1/completions", json={"prompt": "hi", "max_tokens": 2}).status_code == 200
+    assert client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "hi"}], "max_tokens": 2},
+    ).status_code == 200
+
+
 def test_live_metrics_includes_sharing_keys(stub_engine):
     stub_engine.generate(["hello"], SamplingParams(max_new_tokens=2, temperature=0.0))
     metrics = ENGINE_MANAGER.live_metrics()
