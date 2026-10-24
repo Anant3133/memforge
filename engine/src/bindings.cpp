@@ -132,7 +132,9 @@ PYBIND11_MODULE(memforge_c, m) {
 
     // Scheduler class
     py::class_<Scheduler, std::shared_ptr<Scheduler>>(m, "Scheduler")
-        .def(py::init<std::shared_ptr<BlockAllocator>, size_t>(), py::arg("allocator"), py::arg("max_num_seqs") = 256)
+        .def(py::init<std::shared_ptr<BlockAllocator>, size_t, std::shared_ptr<PrefixCache>>(),
+             py::arg("allocator"), py::arg("max_num_seqs") = 256,
+             py::arg("prefix_cache") = nullptr)
         .def("add_sequence", &Scheduler::add_sequence)
         .def("step", &Scheduler::step)
         .def("update_sequence", &Scheduler::update_sequence)
@@ -142,5 +144,7 @@ PYBIND11_MODULE(memforge_c, m) {
         .def("get_num_finished", &Scheduler::get_num_finished)
         .def("has_unfinished_sequences", &Scheduler::has_unfinished_sequences)
         .def("get_sequence", &Scheduler::get_sequence)
-        .def("get_allocator", &Scheduler::get_allocator);
+        .def("get_allocator", &Scheduler::get_allocator)
+        .def("get_prefix_cache", &Scheduler::get_prefix_cache)
+        .def("prefix_sharing_enabled", &Scheduler::prefix_sharing_enabled);
 }

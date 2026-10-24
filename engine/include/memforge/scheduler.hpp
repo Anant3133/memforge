@@ -3,6 +3,7 @@
 #include "memforge/types.hpp"
 #include "memforge/sequence.hpp"
 #include "memforge/block_allocator.hpp"
+#include "memforge/prefix_cache.hpp"
 #include <vector>
 #include <deque>
 #include <memory>
@@ -18,7 +19,15 @@ namespace memforge {
  */
 class Scheduler {
 public:
-    Scheduler(std::shared_ptr<BlockAllocator> allocator, size_t max_num_seqs = 256);
+    /**
+     * @param prefix_cache Optional. When null, admission allocates every block
+     *        fresh -- exactly the pre-prefix-sharing behaviour. Passing a cache
+     *        makes identical prompt prefixes share physical blocks. Kept
+     *        optional so the benchmark can measure both paths in one process and
+     *        so sharing can be switched off if it ever misbehaves in the field.
+     */
+    Scheduler(std::shared_ptr<BlockAllocator> allocator, size_t max_num_seqs = 256,
+              std::shared_ptr<PrefixCache> prefix_cache = nullptr);
     ~Scheduler() = default;
 
     /**
@@ -50,9 +59,21 @@ public:
 
     SequencePtr get_sequence(SequenceId seq_id);
     std::shared_ptr<BlockAllocator> get_allocator() const { return allocator_; }
+    std::shared_ptr<PrefixCache> get_prefix_cache() const { return prefix_cache_; }
+    bool prefix_sharing_enabled() const { return prefix_cache_ != nullptr; }
 
 private:
+    /**
+     * @brief Release a sequence's blocks and keep the prefix registry honest.
+     *
+     * Caller must hold `mutex_`. Lock order throughout this class is
+     * Scheduler -> PrefixCache -> BlockAllocator; nothing below ever reaches
+     * back up, so this is safe to call under the scheduler lock.
+     */
+    void release_sequence_blocks(Sequence& seq);
+
     std::shared_ptr<BlockAllocator> allocator_;
+    std::shared_ptr<PrefixCache> prefix_cache_;  // null => sharing disabled
     size_t max_num_seqs_;
 
     std::deque<SequencePtr> waiting_queue_;

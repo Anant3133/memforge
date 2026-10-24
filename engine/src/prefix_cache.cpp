@@ -129,6 +129,13 @@ void PrefixCache::evict(const std::vector<BlockId>& released) {
     }
 }
 
+uint64_t PrefixCache::first_block_hash(const std::vector<TokenId>& tokens) const {
+    if (shareable_block_count(tokens.size()) == 0) {
+        return 0;
+    }
+    return hash_block(0, tokens.data(), block_size_);
+}
+
 void PrefixCache::clear() {
     std::lock_guard<std::mutex> lock(mutex_);
     by_hash_.clear();

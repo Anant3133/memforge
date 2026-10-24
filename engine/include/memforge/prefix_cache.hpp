@@ -145,6 +145,16 @@ public:
     /// Forget everything. Does not touch reference counts (for tests/benchmarks).
     void clear();
 
+    /**
+     * @brief Chained hash of the first block of `tokens`, or 0 if none is shareable.
+     *
+     * Lets the scheduler recognise two waiting requests that begin with the same
+     * prefix *before* either has been prefilled. Nothing can be shared until a
+     * block's KV is actually written, so without this the first burst of
+     * identical prompts all miss and each computes its own copy.
+     */
+    uint64_t first_block_hash(const std::vector<TokenId>& tokens) const;
+
     // ----------------------------------------------------------- telemetry
 
     size_t num_cached_blocks() const;
