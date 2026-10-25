@@ -395,7 +395,7 @@ Implemented. Measured results and design notes in section 10 below.
 - **Done when:** `benchmarks/results/` holds a GPU report and the README states
   both sets of numbers.
 
-### Phase F — Production hardening *(partially done 2026-10-24)*
+### Phase F — Production hardening ✅ **DONE 2026-10-26**
 
 - [x] Request cancellation on client disconnect all the way into the scheduler.
       Both paths now: SSE relied on Starlette closing the generator (now covered
