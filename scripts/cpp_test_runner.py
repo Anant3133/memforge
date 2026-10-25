@@ -213,6 +213,10 @@ CPP_TEST_SUITES = {
     "test_scheduler": [
         "tests/cpp/test_scheduler.cpp",
         "engine/src/scheduler.cpp",
+        # scheduler.cpp calls into PrefixCache at admission, so this suite does
+        # not link without it. Missing it fails as LNK2019 unresolved externals,
+        # which reads like a broken toolchain rather than a missing source file.
+        "engine/src/prefix_cache.cpp",
         "engine/src/block_allocator.cpp",
         "engine/src/sequence.cpp",
     ],

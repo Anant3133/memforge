@@ -25,6 +25,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -88,6 +89,7 @@ def run_stage_1_cpp_unit_tests() -> tuple[bool, float, str]:
     labels = {
         "test_block_allocator": "BlockAllocator (Physical Memory Pool & Boundary Growth)",
         "test_scheduler": "Scheduler (Continuous Batching Iteration Loop)",
+        "test_prefix_cache": "PrefixCache (Chained Hashing, Sharing & Copy-on-Write)",
     }
 
     toolchains = set()
@@ -107,8 +109,8 @@ def run_stage_1_cpp_unit_tests() -> tuple[bool, float, str]:
                 )
                 return True, time.perf_counter() - start, f"Skipped ({result.detail})"
 
-            console.print(f"  {TAG_ERR} {labels.get(suite, suite)} failed ({result.detail}):")
-            console.print(f"  [dim]{result.output.strip()[:1500]}[/dim]")
+            console.print(f"  {TAG_ERR} {labels.get(suite, suite)} failed ({escape(result.detail)}):")
+            console.print(f"  [dim]{escape(result.output.strip()[:1500])}[/dim]")
             return False, time.perf_counter() - start, f"{suite}: {result.detail}"
 
         toolchains.add(result.toolchain)
@@ -116,7 +118,8 @@ def run_stage_1_cpp_unit_tests() -> tuple[bool, float, str]:
 
     elapsed = time.perf_counter() - start
     used = "/".join(sorted(toolchains))
-    return True, elapsed, f"2 C++ Test Suites Passed ({used})"
+    count = len(CPP_TEST_SUITES)
+    return True, elapsed, f"{count} C++ Test Suites Passed ({used})"
 
 
 def run_stage_2_pybind_verification() -> tuple[bool, float, str]:
@@ -155,7 +158,7 @@ def run_stage_2_pybind_verification() -> tuple[bool, float, str]:
         return True, elapsed, "Native pybind11 C++ bridge active"
 
     except Exception as e:
-        console.print(f"  [bold yellow][WARN][/bold yellow] Native C++ module fallback: {e}")
+        console.print(f"  [bold yellow][WARN][/bold yellow] Native C++ module fallback: {escape(str(e))}")
         elapsed = time.perf_counter() - start
         return True, elapsed, "Python Fallback Active"
 
@@ -170,11 +173,16 @@ def run_stage_3_pytest_suite() -> tuple[bool, float, str]:
     if res.returncode == 0:
         lines = [line for line in res.stdout.splitlines() if "PASSED" in line]
         for line in lines:
-            console.print(f"  {TAG_OK} {line.strip()}")
+            console.print(f"  {TAG_OK} {escape(line.strip())}")
         elapsed = time.perf_counter() - start
         return True, elapsed, f"{len(lines)} Python Tests Passed"
     else:
-        console.print(f"  {TAG_ERR} Pytest suite reported errors:\n{res.stdout}\n{res.stderr}")
+        # Raw pytest output must be escaped: a parametrised test id such as
+        # "test_x[/v1/completions-body0]" looks like a rich closing tag and
+        # raises MarkupError, which used to take the whole pipeline down while
+        # it was trying to report a different failure.
+        console.print(f"  {TAG_ERR} Pytest suite reported errors:")
+        console.print(escape(f"{res.stdout}\n{res.stderr}"))
         elapsed = time.perf_counter() - start
         return False, elapsed, "Pytest tests failed"
 
@@ -330,7 +338,7 @@ def run_stage_7_live_engine() -> tuple[bool, float, str]:
     try:
         from transformers import AutoModelForCausalLM, AutoTokenizer
     except ImportError as exc:
-        console.print(f"  [bold yellow][SKIP][/bold yellow] transformers unavailable: {exc}")
+        console.print(f"  [bold yellow][SKIP][/bold yellow] transformers unavailable: {escape(str(exc))}")
         return True, time.perf_counter() - start, "Skipped (transformers missing)"
 
     try:
@@ -446,7 +454,7 @@ def main():
             summary_results.append((name, ok, duration, details))
             console.print()
         except Exception as e:
-            console.print(f"[bold red]Error in {name}: {e}[/bold red]")
+            console.print(f"[bold red]Error in {escape(name)}:[/bold red] {escape(str(e))}")
             summary_results.append((name, False, 0.0, str(e)))
             console.print()
 
