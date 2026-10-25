@@ -27,7 +27,9 @@ from typing import Any, Deque, Dict, List, Optional
 import torch
 from transformers.cache_utils import DynamicCache
 
+from memforge_ml.kernels import attention_backend
 from memforge_ml.kernels.batched_decode import BatchedDecodeBuffers, assemble_batch
+from memforge_ml.runtime.decode_view_cache import capacity_for
 from memforge_ml.runtime.kv_pool import ModelKVSpec, PagedKVPool
 from memforge_ml.runtime.paged_cache import PagedCache
 from memforge_ml.runtime.prefix_sharing import block_owners, copy_block, sharing_telemetry
@@ -73,6 +75,8 @@ class SequenceRuntime:
     num_prefills: int = 0
     num_preemptions: int = 0
     decoded_chars: int = 0
+    #: Bytes of decode-mirror budget this sequence holds, 0 if it has none.
+    view_cache_bytes: int = 0
 
     @property
     def done(self) -> bool:
@@ -118,6 +122,9 @@ class ContinuousBatchingEngine:
         device: Optional[str] = None,
         batched_decode: bool = True,
         enable_prefix_sharing: bool = True,
+        decode_view_cache: bool = False,
+        view_cache_budget_mb: float = 512.0,
+        block_attention: bool = False,
     ):
         if not HAS_CPP_ENGINE:
             raise RuntimeError(
@@ -133,6 +140,18 @@ class ContinuousBatchingEngine:
         self.max_num_seqs = max_num_seqs
         self.max_model_len = max_model_len
         self.batched_decode = batched_decode
+        # Tier 2 is opt-in and budgeted: see _grant_view_capacity().
+        if decode_view_cache and block_attention:
+            raise ValueError(
+                "decode_view_cache and block_attention are mutually exclusive: "
+                "the mirror makes materialising the context cheap, block-wise "
+                "attention avoids materialising it at all"
+            )
+        self.decode_view_cache = decode_view_cache
+        self.view_cache_budget_bytes = int(max(0.0, view_cache_budget_mb) * 1024 * 1024)
+        self._view_cache_bytes_in_use = 0
+        self.total_view_cache_grants = 0
+        self.total_view_cache_denials = 0
 
         self.spec = ModelKVSpec.from_config(model.config, self.dtype, self.device)
         if num_blocks is None:
@@ -142,7 +161,9 @@ class ContinuousBatchingEngine:
         # Reusable batch scratch for the decode path. Shape-cached, so a
         # context growing one token per step does not reallocate a buffer
         # pair every step -- which was most of the cost it removes.
-        self.decode_buffers = BatchedDecodeBuffers(self.spec.num_layers)
+        self.decode_buffers = BatchedDecodeBuffers(
+            self.spec.num_layers, block_size=block_size
+        )
 
         self.allocator = memforge_c.BlockAllocator(num_blocks, block_size)
         # Prefix sharing is opt-out so A/B benchmarking stays possible in one
@@ -152,6 +173,19 @@ class ContinuousBatchingEngine:
             memforge_c.PrefixCache(self.allocator, block_size) if enable_prefix_sharing else None
         )
         self.scheduler = memforge_c.Scheduler(self.allocator, max_num_seqs, self.prefix_cache)
+
+        # Tier 3 has to be installed on the model, not just enabled on the
+        # engine, and registration can fail on a transformers without the
+        # attention registry -- in which case the flag is reported as off
+        # rather than silently doing nothing.
+        self.block_attention = bool(block_attention) and attention_backend.enable_on(model)
+        if block_attention and not self.block_attention:
+            print(
+                "[ContinuousBatchingEngine] block attention unavailable on this "
+                "transformers version; falling back to the materialised read path"
+            )
+        self.total_blockwise_layers = 0
+        self.total_blockwise_fallbacks = 0
 
         self.eos_token_ids = self._resolve_eos_ids()
         self.runtimes: Dict[int, SequenceRuntime] = {}
@@ -201,6 +235,11 @@ class ContinuousBatchingEngine:
             "max_model_len": self.max_model_len,
             "batched_decode": self.batched_decode,
             "prefix_sharing": self.prefix_cache is not None,
+            "decode_view_cache": self.decode_view_cache,
+            "block_attention": self.block_attention,
+            "view_cache_budget_mb": round(
+                self.view_cache_budget_bytes / (1024 * 1024), 2
+            ),
             "eos_token_ids": sorted(self.eos_token_ids),
             "kv_pool": self.pool.describe(),
         }
@@ -283,6 +322,53 @@ class ContinuousBatchingEngine:
             self.scheduler.abort_sequence(seq_id)
             self._finish(rt, "aborted")
 
+    # ------------------------------------------------------- decode mirror
+
+    def _view_capacity_bytes(self, capacity_tokens: int) -> int:
+        """Bytes one sequence's mirror would occupy: K and V, every layer."""
+        return (
+            2
+            * self.spec.num_layers
+            * self.spec.num_kv_heads
+            * capacity_tokens
+            * self.spec.head_dim
+            * torch.empty(0, dtype=self.dtype).element_size()
+        )
+
+    def _grant_view_capacity(self, rt: "SequenceRuntime") -> Optional[int]:
+        """
+        Decide whether this sequence gets a decode mirror, and how large.
+
+        Sized from the sequence's own length rather than `max_model_len`, because
+        the gap between them is usually most of the memory. Granted only while
+        the shared budget allows: beyond it the sequence reads the pool as
+        normal, which is slower but correct. That is what keeps enabling this a
+        latency/memory trade rather than a way to run out of memory -- a global
+        switch with no cap would make a burst of long requests fatal.
+        """
+        if not self.decode_view_cache:
+            return None
+
+        capacity = capacity_for(rt.prompt_len, rt.params.max_new_tokens)
+        needed = self._view_capacity_bytes(capacity)
+        if self._view_cache_bytes_in_use + needed > self.view_cache_budget_bytes:
+            self.total_view_cache_denials += 1
+            return None
+
+        self._view_cache_bytes_in_use += needed
+        self.total_view_cache_grants += 1
+        rt.view_cache_bytes = needed
+        return capacity
+
+    def _release_view_capacity(self, rt: "SequenceRuntime") -> None:
+        """Return a sequence's mirror budget. Idempotent."""
+        if rt.view_cache_bytes:
+            self._view_cache_bytes_in_use -= rt.view_cache_bytes
+            # Clamp rather than trust the arithmetic: a negative in-use figure
+            # would silently grant unlimited capacity from then on.
+            self._view_cache_bytes_in_use = max(0, self._view_cache_bytes_in_use)
+            rt.view_cache_bytes = 0
+
     # ------------------------------------------------------------------ steps
 
     def has_work(self) -> bool:
@@ -315,6 +401,10 @@ class ContinuousBatchingEngine:
             if rt is not None and rt.cache is not None:
                 # Blocks were reclaimed by the scheduler; drop the stale mapping so
                 # the sequence is recomputed from scratch on readmission.
+                # The mirror dies with the cache, so its budget must come
+                # back or a preempted sequence would leak capacity and
+                # starve every later one.
+                self._release_view_capacity(rt)
                 rt.cache = None
                 rt.num_preemptions += 1
                 self.total_preemptions += 1
@@ -365,7 +455,13 @@ class ContinuousBatchingEngine:
 
         block_table = list(info.block_table)
         if rt.cache is None:
-            rt.cache = PagedCache(self.pool, block_table, device=self.device)
+            rt.cache = PagedCache(
+                self.pool,
+                block_table,
+                device=self.device,
+                view_capacity=self._grant_view_capacity(rt),
+                lazy_read=self.block_attention,
+            )
         else:
             rt.cache.reset()
         rt.cache.begin_step(block_table)
@@ -467,8 +563,24 @@ class ContinuousBatchingEngine:
                 continue
             self._begin_write_step(rt, info)
             ids = torch.tensor([[rt.tokens[-1]]], dtype=torch.long, device=self.device)
-            with torch.no_grad():
-                out = self.model(input_ids=ids, past_key_values=rt.cache, use_cache=True)
+            if self.block_attention:
+                # The backend has no reference to the cache from its own
+                # signature, so the pool and this sequence's cache are bound for
+                # the duration of the pass. Counters let telemetry show whether
+                # the kernel was actually taken -- a silent fallback would look
+                # exactly like success.
+                with attention_backend.paged_attention_context(self.pool, rt.cache) as bound:
+                    with torch.no_grad():
+                        out = self.model(
+                            input_ids=ids, past_key_values=rt.cache, use_cache=True
+                        )
+                self.total_blockwise_layers += bound.used
+                self.total_blockwise_fallbacks += bound.fallbacks
+            else:
+                with torch.no_grad():
+                    out = self.model(
+                        input_ids=ids, past_key_values=rt.cache, use_cache=True
+                    )
             self.total_forward_passes += 1
             token_id = sample_logits(out.logits[0, -1], rt.params, rt.generator)
             ev = self._accept_token(rt, token_id, source="target")
@@ -608,6 +720,7 @@ class ContinuousBatchingEngine:
             return
         rt.finish_reason = reason
         rt.finished_at = time.perf_counter()
+        self._release_view_capacity(rt)
         rt.cache = None  # the scheduler frees the physical blocks on its next step
 
     # ----------------------------------------------------------------- output
@@ -680,6 +793,18 @@ class ContinuousBatchingEngine:
             "preemptions": self.total_preemptions,
             "cached_prefix_tokens": self.total_cached_prefix_tokens,
             "cow_copies": self.total_cow_copies,
+            "decode_view_cache_enabled": self.decode_view_cache,
+            "block_attention_enabled": self.block_attention,
+            "blockwise_layer_calls": self.total_blockwise_layers,
+            "blockwise_fallbacks": self.total_blockwise_fallbacks,
+            "view_cache_mb_in_use": round(
+                self._view_cache_bytes_in_use / (1024 * 1024), 3
+            ),
+            "view_cache_budget_mb": round(
+                self.view_cache_budget_bytes / (1024 * 1024), 2
+            ),
+            "view_cache_grants": self.total_view_cache_grants,
+            "view_cache_denials": self.total_view_cache_denials,
             "total_blocks": total,
             "free_blocks": free,
             "allocated_blocks": total - free,

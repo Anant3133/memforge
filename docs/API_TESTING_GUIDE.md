@@ -491,6 +491,11 @@ The fields worth knowing:
 | `block_owners` | `{"0": [1,2,3]}` — block id to **all** owning sequences |
 | `preemptions` | sequences evicted under memory pressure and recomputed |
 | `cow_copies` | copy-on-write block copies. Expected to stay 0 |
+| `decode_view_cache_enabled` | whether the Phase A tier 2 mirror is on |
+| `view_cache_mb_in_use` / `view_cache_budget_mb` | mirror memory held vs its cap |
+| `view_cache_grants` / `view_cache_denials` | sequences given a mirror vs refused for budget |
+| `block_attention_enabled` | whether Phase A tier 3 is on |
+| `blockwise_layer_calls` / `blockwise_fallbacks` | layers that took the block-wise path vs fell back. A rising fallback count with the flag on means something is preventing it — a padded batch, or a multi-token step |
 
 Every field is always present. When prefix sharing is off they are zeroed rather
 than omitted, so a client can bind to one shape.

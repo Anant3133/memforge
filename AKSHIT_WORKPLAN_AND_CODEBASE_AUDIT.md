@@ -410,6 +410,8 @@ the same reason.
 | 2 append-only mirror | yes, opt-in | **1.13-1.29x**, beats contiguous | 40-160 MB per sequence |
 | 3 block-wise attention | reference + proof | slower on CPU, by design | none |
 
+*Both tier 2 and tier 3 are now wired through configuration into the engine; see §A.4c.*
+
 The stated definition of done — within 5% of contiguous at 2048 — was already
 met before any of this, for the reasons in §A.4b. With tier 2 enabled the engine
 is 1.147x *faster* than contiguous at 2048, which is the stronger claim and the
@@ -417,6 +419,118 @@ one worth making. The `O(L)` to `O(1)` limitation in
 `PROGRESS_AND_NEXT_PHASES.md` §7.1 is addressed by tier 2 for single-sequence
 decode and by tier 3 structurally; limitation §7.2, the batched round-trip, is
 addressed by tier 1b.
+
+## A.4c Connected end to end (2026-10-25)
+
+§A.4b shipped the kernels but left two of them unreachable: tier 2 could only be
+used by constructing a `PagedCache` by hand, which only the benchmark did, and
+tier 3 was a proven function nothing called. Both are now wired through
+configuration into the engine, with nothing hardcoded along the way.
+
+### Configuration, not constants
+
+| Variable | Default | Effect |
+| :--- | :--- | :--- |
+| `MEMFORGE_DECODE_VIEW_CACHE` | `false` | Tier 2: per-sequence contiguous mirror |
+| `MEMFORGE_VIEW_CACHE_BUDGET_MB` | `512` | Hard cap on total mirror memory |
+| `MEMFORGE_BLOCK_ATTENTION` | `false` | Tier 3: block-wise attention, nothing materialised |
+
+`server/config.py` → `EngineManager` → `ContinuousBatchingEngine` → per-sequence
+`PagedCache`. Both tiers are off by default, so default behaviour is unchanged.
+
+**The budget is what makes tier 2 safe to switch on.** A mirror is sized from
+each sequence's own `prompt + max_new_tokens`, and granted only while the shared
+budget allows; past it the sequence reads the pool as normal. Verified: with a
+0.001 MB budget all four requests are denied, produce byte-identical output, and
+the engine reports `grants=0, denials=4`. A global flag with no cap would turn a
+burst of long requests into an out-of-memory failure. Budget is released on
+finish, abort *and* preemption — a preempted sequence that kept its grant would
+starve every later one, so that path is released explicitly and clamped at zero
+rather than trusted to balance.
+
+**The two tiers are mutually exclusive and the engine refuses both**, in the
+constructor and again in `PagedCache`. They solve the same problem in opposite
+directions — one makes materialising cheap, the other avoids materialising — so
+enabling both is a configuration mistake worth rejecting rather than silently
+resolving.
+
+The one remaining magic number is gone too: the batched-decode buffer bucket was
+`pad_to=64` at the call site and is now `block_size × DEFAULT_BUCKET_BLOCKS`, so
+bucket granularity follows the pool's own block granularity instead of an
+unrelated constant that happened to agree with it.
+
+### How tier 3 reaches the model
+
+`LlamaAttention.forward` resolves its implementation through
+`ALL_ATTENTION_FUNCTIONS.get_interface(config._attn_implementation, ...)`, so
+`memforge_paged` is registered there and set on the config — no monkey-patching,
+and it works for any architecture using that registry.
+
+The registered function gets no reference to the cache, so
+`paged_attention_context(pool, cache)` binds it thread-locally for the duration
+of a forward pass. Thread-local rather than `contextvars` because
+`loop.run_in_executor` does not propagate context into the executor thread,
+which is exactly where `engine.step()` runs.
+
+It takes over **decode only**. A single query needs no mask — everything before
+it is visible — so block-wise attention is exactly equivalent there. Prefill is
+a multi-query causal problem with a real mask and falls back to the materialised
+path, which is also where the win is: prefill reads the context once by
+construction, decode re-read all of it every step.
+
+Lazy mode is what makes the memory claim real. `PagedCache.update()` normally
+returns the whole materialised context; with `lazy_read` it returns only the
+token just written and the backend reads the rest from the pool block by block.
+Without that, computing attention differently would have saved nothing.
+
+### Three integration bugs, all of which produced plausible wrong output
+
+Worth recording in full, because none would have been caught by checking for
+exceptions and all three looked like numerical noise:
+
+1. **Off-by-one context length.** The binding captured `cache.position` *before*
+   the forward pass, so the query could not attend to its own key. Max logit
+   deviation 0.72, while every layer reported taking the fast path. Fixed
+   structurally: the binding holds the cache and reads `position` at attention
+   time, after `update()` has run, so the bug class cannot recur.
+
+2. **Wrong output layout.** Transformers' own `eager_attention_forward` ends
+   with `attn_output.transpose(1, 2).contiguous()` and the caller reshapes on
+   `(batch, q_len, heads, dim)`. Returning the head-major form interleaved the
+   head and position axes.
+
+3. **Missing causal mask.** `create_causal_mask()` has an `allow_is_causal_skip`
+   fast path: when the mask would be purely causal it returns **None** and
+   expects the backend to enforce causality itself, as sdpa and flash do.
+   Treating `None` as "attend to everything" made prefill *bidirectional* —
+   0.16 deviation on prefill compounding to 0.71 through decode. Registering a
+   mask builder did not help, because the skip happens before that registry is
+   consulted; the backend applies causality itself.
+
+All three are pinned by regression tests, and each was **mutation-verified**:
+reintroducing it fails at least two tests, including the end-to-end engine
+check.
+
+### Verification
+
+Byte-identical output across all three modes on a live server
+(SmolLM2-135M, same prompt, seed 7, sequential decode):
+
+| Mode | Telemetry | Output |
+| :--- | :--- | :--- |
+| baseline | `mirror=False blockattn=False` | identical |
+| `MEMFORGE_DECODE_VIEW_CACHE=true` | `grants=1`, 0 denials | identical |
+| `MEMFORGE_BLOCK_ATTENTION=true` | **450 block-wise layer calls, 0 fallbacks** | identical |
+
+Zero leaked blocks in every mode. Kernel-level equivalence is tighter still:
+prefill differs by **exactly 0.0** and decode by **1.19e-07**, which is float32
+rounding.
+
+Telemetry reports both tiers, including `blockwise_fallbacks` — a rising
+fallback count with the flag on means something is preventing the kernel, and a
+silent fallback would otherwise look exactly like success.
+
+**222 Python tests** (209 + 13 new backend tests), 3/3 C++ suites, pipeline 7/7.
 
 ## A.5 Definition of done
 

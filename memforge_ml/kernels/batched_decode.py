@@ -32,7 +32,7 @@ this module exists to remove.
 
 from __future__ import annotations
 
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
 
@@ -55,9 +55,28 @@ class BatchedDecodeBuffers:
     the padding region re-zeroed on reuse.
     """
 
-    def __init__(self, num_layers: int, pad_to: int = 64):
+    #: Buffers are bucketed this many blocks wide by default. Four is a
+    #: compromise rather than a magic number: a context grows one token per
+    #: step, so bucketing avoids reallocating a buffer pair every step, while
+    #: each bucket costs `pad_to x batch x heads x dim x layers x 2` bytes of
+    #: padding that is allocated and never read. At SmolLM2-360M geometry and
+    #: batch 8 that is roughly 42 MB for a 4-block bucket, which is worth
+    #: paying once and not worth multiplying.
+    DEFAULT_BUCKET_BLOCKS = 4
+
+    def __init__(self, num_layers: int, block_size: int = 16,
+                 pad_to: Optional[int] = None):
+        """
+        `pad_to` defaults to `block_size * DEFAULT_BUCKET_BLOCKS`, so the bucket
+        granularity follows the pool's own block granularity rather than being
+        an unrelated constant that happens to be 64.
+        """
         self.num_layers = num_layers
-        self.pad_to = max(1, pad_to)
+        self.block_size = max(1, block_size)
+        self.pad_to = max(
+            1,
+            pad_to if pad_to else self.block_size * self.DEFAULT_BUCKET_BLOCKS,
+        )
         self._cache: Dict[Tuple[int, int], Tuple[torch.Tensor, torch.Tensor]] = {}
 
     def padded_len(self, max_len: int) -> int:

@@ -209,6 +209,24 @@ MEMFORGE_LOAD_DRAFT=false \
   uvicorn server.app:app --port 8000
 ```
 
+Two Phase A read-path options, both off by default and mutually exclusive:
+
+```bash
+# FASTEST DECODE — a contiguous mirror per running sequence. About 1.15x quicker
+# than stock contiguous decode, at 40–160 MB per sequence. The budget is a hard
+# cap: past it, sequences fall back to reading the pool, so this can cost
+# latency but never memory.
+MEMFORGE_DECODE_VIEW_CACHE=true \
+MEMFORGE_VIEW_CACHE_BUDGET_MB=512 \
+  uvicorn server.app:app --port 8000
+
+# LOWEST MEMORY — attention computed block by block out of the pool, so the
+# context is never materialised. Costs no extra memory and is SLOWER on CPU; it
+# exists because it is the structure a GPU kernel takes.
+MEMFORGE_BLOCK_ATTENTION=true \
+  uvicorn server.app:app --port 8000
+```
+
 **Environment variables are read at import time.** Setting one after the server
 has started does nothing — you have to restart it. This catches everybody once.
 

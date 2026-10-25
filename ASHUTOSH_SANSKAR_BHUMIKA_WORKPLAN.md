@@ -231,6 +231,9 @@ starting the server**, not after.
 | `MEMFORGE_MAX_CONCURRENCY` | `32` | admitted requests before 429 |
 | `MEMFORGE_DEFAULT_MAX_TOKENS` | `96` | default generation length |
 | `MEMFORGE_BATCHED_DECODE` | `true` | `false` forces the sequential decode path |
+| `MEMFORGE_DECODE_VIEW_CACHE` | `false` | Phase A tier 2. Keeps a contiguous mirror of each running sequence's KV, making decode ~1.15x faster than stock contiguous. Costs memory — see the budget below |
+| `MEMFORGE_VIEW_CACHE_BUDGET_MB` | `512` | Total cap across all sequences for the mirror above. A request that would exceed it reads the pool instead, so this can slow down but never run out of memory |
+| `MEMFORGE_BLOCK_ATTENTION` | `false` | Phase A tier 3. Attention computed block by block straight out of the pool, so the context is never materialised and working memory is O(block_size). Costs no memory and is **slower on CPU**; it is the shape a GPU kernel takes. Mutually exclusive with the mirror |
 
 Two configurations worth saving as shell aliases:
 

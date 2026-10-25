@@ -107,6 +107,9 @@ class EngineManager:
             max_num_seqs=cfg.max_num_seqs,
             max_model_len=cfg.max_model_len,
             batched_decode=cfg.batched_decode,
+            decode_view_cache=cfg.decode_view_cache,
+            view_cache_budget_mb=cfg.view_cache_budget_mb,
+            block_attention=cfg.block_attention,
         )
         print(f"[EngineManager] continuous engine ready: {self.engine.pool.describe()}")
 

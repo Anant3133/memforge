@@ -60,6 +60,19 @@ class PagedCacheLayer(CacheLayerMixin):
         write_index = self.owner.flat_indices(start, end)
         self.owner.pool.write_flat(self.layer_idx, write_index, key_states, value_states)
 
+        if self.owner.lazy_read and num_new == 1:
+            # Lazy mode: hand back only the token just written. The attention
+            # backend reads the rest of the context out of the pool block by
+            # block, which is what keeps working memory O(block_size) instead of
+            # O(context) -- materialising the full context here would make the
+            # block-wise kernel pointless.
+            #
+            # Restricted to num_new == 1 because that is the case the backend
+            # handles: a single query attends to everything before it and needs
+            # no mask. Prefill still returns the full context below.
+            self.position = end
+            return key_states, value_states
+
         mirror = self.owner.view_cache
         if mirror is not None:
             # The pool above is still the source of truth; this mirrors the same
@@ -104,6 +117,7 @@ class PagedCache(Cache):
         block_table: List[int],
         device: Optional[str] = None,
         view_capacity: Optional[int] = None,
+        lazy_read: bool = False,
     ):
         """
         `view_capacity`, when given, enables the append-only decode mirror
@@ -111,12 +125,24 @@ class PagedCache(Cache):
         contiguous copy of this sequence's KV, so it trades the memory paging
         exists to save for a measured ~10x on the decode read path. See
         decode_view_cache.py for the arithmetic.
+
+        `lazy_read` makes a single-token `update()` return only that token
+        rather than the whole context, for use with the block-wise attention
+        backend which reads the context from the pool itself. It is mutually
+        exclusive with `view_capacity`: the mirror exists to make materialising
+        cheap, and lazy mode exists to avoid materialising at all.
         """
+        if lazy_read and view_capacity:
+            raise ValueError(
+                "lazy_read and view_capacity are mutually exclusive: the mirror "
+                "materialises the context, lazy mode avoids materialising it"
+            )
         self.pool = pool
         self.device_str = device or pool.spec.device
         self._block_table: torch.Tensor = PagedKVPool.block_table_tensor(block_table, self.device_str)
         self._index_memo: Dict[Tuple[int, int], Tuple[torch.Tensor, torch.Tensor]] = {}
         self._flat_memo: Dict[Tuple[int, int], torch.Tensor] = {}
+        self.lazy_read = bool(lazy_read)
         self.view_cache: Optional[DecodeViewCache] = (
             DecodeViewCache(pool.spec, view_capacity, self.device_str)
             if view_capacity
