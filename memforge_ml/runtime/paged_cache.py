@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 from transformers.cache_utils import Cache, CacheLayerMixin
 
+from memforge_ml.runtime.decode_view_cache import DecodeViewCache
 from memforge_ml.runtime.kv_pool import PagedKVPool
 
 
@@ -58,8 +59,17 @@ class PagedCacheLayer(CacheLayerMixin):
         # translation is paid once per step rather than 32 times.
         write_index = self.owner.flat_indices(start, end)
         self.owner.pool.write_flat(self.layer_idx, write_index, key_states, value_states)
-        self.position = end
 
+        mirror = self.owner.view_cache
+        if mirror is not None:
+            # The pool above is still the source of truth; this mirrors the same
+            # write so the read below is a view instead of a fresh gather of the
+            # whole context. O(1) per step rather than O(context).
+            mirror.append(self.layer_idx, key_states, value_states, start)
+            self.position = end
+            return mirror.view(self.layer_idx, end)
+
+        self.position = end
         read_index = self.owner.flat_indices(0, end)
         return self.owner.pool.gather_flat(self.layer_idx, read_index)
 
@@ -88,12 +98,30 @@ class PagedCache(Cache):
     so the per-step index translation is computed once and shared by all layers.
     """
 
-    def __init__(self, pool: PagedKVPool, block_table: List[int], device: Optional[str] = None):
+    def __init__(
+        self,
+        pool: PagedKVPool,
+        block_table: List[int],
+        device: Optional[str] = None,
+        view_capacity: Optional[int] = None,
+    ):
+        """
+        `view_capacity`, when given, enables the append-only decode mirror
+        (`DecodeViewCache`) sized to that many tokens. Off by default: it is a
+        contiguous copy of this sequence's KV, so it trades the memory paging
+        exists to save for a measured ~10x on the decode read path. See
+        decode_view_cache.py for the arithmetic.
+        """
         self.pool = pool
         self.device_str = device or pool.spec.device
         self._block_table: torch.Tensor = PagedKVPool.block_table_tensor(block_table, self.device_str)
         self._index_memo: Dict[Tuple[int, int], Tuple[torch.Tensor, torch.Tensor]] = {}
         self._flat_memo: Dict[Tuple[int, int], torch.Tensor] = {}
+        self.view_cache: Optional[DecodeViewCache] = (
+            DecodeViewCache(pool.spec, view_capacity, self.device_str)
+            if view_capacity
+            else None
+        )
         super().__init__(layers=[PagedCacheLayer(self, i) for i in range(pool.spec.num_layers)])
 
     # ------------------------------------------------------- engine interface
@@ -106,6 +134,17 @@ class PagedCache(Cache):
             self._block_table = PagedKVPool.block_table_tensor(block_table, self.device_str)
             self._index_memo.clear()
             self._flat_memo.clear()
+            if self.view_cache is not None:
+                # The table changed, which after copy-on-write means some logical
+                # position now lives in a different physical block. The mirror
+                # cannot tell which, so it re-reads what it needs from the pool
+                # -- the only safe move, and rare enough not to matter.
+                resident = self.layers[0].position
+                self.view_cache.invalidate()
+                if resident:
+                    self.view_cache.seed(
+                        self.pool, self.flat_indices(0, resident), resident
+                    )
 
     def begin_step(self, block_table: Optional[List[int]] = None) -> None:
         if block_table is not None:
@@ -130,6 +169,15 @@ class PagedCache(Cache):
             raise ValueError(f"num_cached_tokens must be non-negative, got {num_cached_tokens}")
         for layer in self.layers:
             layer.position = num_cached_tokens
+        if self.view_cache is not None:
+            # These tokens were written by a *different* sequence, whose blocks
+            # this one now shares, so the mirror has never seen them. Fill it
+            # from the pool once rather than leaving it to serve zeros.
+            self.view_cache.invalidate()
+            if num_cached_tokens:
+                self.view_cache.seed(
+                    self.pool, self.flat_indices(0, num_cached_tokens), num_cached_tokens
+                )
         self._index_memo.clear()
         self._flat_memo.clear()
 
@@ -182,6 +230,8 @@ class PagedCache(Cache):
             return
         for layer in self.layers:
             layer.crop(num_tokens)
+        if self.view_cache is not None:
+            self.view_cache.truncate(self.layers[0].position)
         self._index_memo.clear()
         self._flat_memo.clear()
 
@@ -190,6 +240,8 @@ class PagedCache(Cache):
             layer.reset()
         self._index_memo.clear()
         self._flat_memo.clear()
+        if self.view_cache is not None:
+            self.view_cache.reset()
 
     def num_blocks_needed(self, total_tokens: int) -> int:
         bs = self.pool.block_size

@@ -295,15 +295,14 @@ Useful environment variables: `MEMFORGE_TARGET_MODEL`, `MEMFORGE_DRAFT_MODEL`,
 
 These are deliberate scope boundaries, not unknowns:
 
-1. **The paged gather is Python-level.** Reading a sequence's KV costs
-   `O(context_length)` indexing per layer per step. It is break-even against
-   contiguous caching at these context lengths, but it will not stay that way as
-   context grows — the gather is `O(L)` where a fused kernel would be `O(1)`
-   pointer arithmetic. This is the single biggest performance item remaining.
-2. **Batched decode round-trips through a temporary contiguous cache.** The batch
-   is gathered out of the pool, left-padded, run, and the new K/V scattered back.
-   Correct and genuinely batched, but it copies the whole batch context every step
-   instead of letting attention read the blocks in place.
+1. ~~**The paged gather is Python-level.**~~ **Addressed 2026-10-25 (Phase A).**
+   The `O(context)` rebuild is replaced for single-sequence decode by an
+   opt-in append-only mirror, and a block-wise attention kernel that never
+   materialises the context exists with an equivalence proof. See section 11.
+2. ~~**Batched decode round-trips through a temporary contiguous cache.**~~
+   **Addressed 2026-10-25 (Phase A tier 1b).** The batch is gathered straight
+   into one preallocated buffer, removing the `F.pad` and `torch.cat` copies
+   — 640 MB per step at batch 8 / context 2048. See section 11.
 3. **Prefill is one sequence at a time.** Multiple simultaneous arrivals prefill
    sequentially. There is no chunked prefill, so a long prompt occupies a step.
 4. **Speculative decoding is single-sequence**, serialized behind a lock, and not
@@ -333,10 +332,12 @@ These are deliberate scope boundaries, not unknowns:
 
 Ordered by value for effort. Each has a concrete definition of done.
 
-### Phase A — Make the paged gather cheap *(highest value)*
+### Phase A — Make the paged gather cheap ✅ **DONE 2026-10-25**
 
-The gather is the one thing standing between this engine and real performance at
-long context.
+Delivered across three tiers. Measured results and the design reasoning are in
+section 11 and
+[AKSHIT_WORKPLAN_AND_CODEBASE_AUDIT.md](AKSHIT_WORKPLAN_AND_CODEBASE_AUDIT.md)
+§A.4b.
 
 - Replace the per-step Python gather with a fused kernel: Triton for CUDA, or at
   minimum a vectorized `index_select` into a preallocated buffer to stop
@@ -344,8 +345,12 @@ long context.
 - Let attention read blocks **in place** for the batched decode path, removing the
   temporary contiguous cache round-trip (limitation 2).
 - **Done when:** paged throughput is within 5% of contiguous at 2,048-token
-  context — the current comparison only holds at ~40 tokens — and
-  `benchmarks/run_live_engine.py` reports it across a context sweep.
+  context, reported across a context sweep. — **Met, and the criterion turned
+  out to be weak.** It was already satisfied before any optimisation (0.971x at
+  2048), because the baseline `DynamicCache` is *also* `O(context)` per step, so
+  the ratio is insensitive to the problem the goal describes. With the tier 2
+  mirror the engine is **1.147x faster than contiguous** at 2048, which is the
+  stronger claim. Section 11 reports both.
 
 ### Phase B — Prefix sharing via copy-on-write ✅ **DONE 2026-10-24**
 
@@ -576,3 +581,129 @@ Three further things worth reading off the table:
   ratio floor is ~1/6 rather than ~1/8 at N=8 (each sequence keeps a private
   tail block). Needs the CoW path in §10.3 to become live, which is precisely
   why that path was built now.
+
+---
+
+## 11. Phase A — the paged read path (2026-10-25)
+
+Limitation §7.1 called the `O(context)` gather "the single biggest performance
+item remaining". It is addressed, in a shape rather different from the one the
+plan described, because measuring it first changed the answer twice.
+
+Track 2 work. Full design reasoning in
+[AKSHIT_WORKPLAN_AND_CODEBASE_AUDIT.md](AKSHIT_WORKPLAN_AND_CODEBASE_AUDIT.md)
+Part A.
+
+### 11.1 The definition of done was already met, and the criterion is weak
+
+Phase A's goal was "paged throughput within 5% of contiguous at 2,048 tokens".
+Measured on the baseline, **before any optimisation**
+(`benchmarks/run_context_sweep.py`, SmolLM2-360M, fp32, CPU, medians of 3
+interleaved repeats):
+
+| Context | Contiguous tok/s | Paged tok/s | Relative |
+| ---: | ---: | ---: | ---: |
+| 128 | 13.50 | 12.42 | 0.920 |
+| 512 | 12.49 | 12.02 | 0.962 |
+| 1024 | 10.38 | 10.74 | 1.034 |
+| 2048 | 8.23 | 7.99 | **0.971** |
+
+Already within 5%. It had simply never been measured at 2048 — §3.3's comparison
+is taken at roughly 40 tokens.
+
+**Why that is not the reassurance it looks like.** The baseline is
+`DynamicCache`, which also concatenates its whole context every decode step, so
+both paths are `O(context)`: contiguous slows 1.64x from 128 to 2048, paged
+1.55x. The ratio stays near 1.0 because they degrade together, which makes the
+criterion structurally insensitive to the very problem §7.1 describes. The
+verdict is also noise-sensitive — the 2048 ratio measured 0.971x on one run and
+0.890x on another, flipping the "within 5%" answer.
+
+### 11.2 What was built, and what each part actually bought
+
+| Tier | Change | Measured | Memory cost |
+| :--- | :--- | :--- | :--- |
+| 1a | Flattened `index_select` gather (`memforge_ml/kernels/paged_gather.py`) | ~1.2x isolated, **nil end to end** | none |
+| 1b | Batched decode assembled into one preallocated buffer, no `F.pad`/`cat` (`kernels/batched_decode.py`) | **1.28-1.36x** at batch 8 | none |
+| 2 | Append-only decode mirror, opt-in (`runtime/decode_view_cache.py`) | **1.13-1.29x**, beats contiguous | 40-160 MB per sequence |
+| 3 | Block-wise attention, online softmax (`kernels/block_attention.py`) | slower on CPU, by design | none |
+
+**Tier 1a is kept but is not a win.** The flattened gather is the predicted ~1.2x
+in isolation and lost in the noise end to end (1.006x, 0.943x, 0.972x, 1.045x
+across the sweep) — the gather is not a large enough share of a decode step on
+this model for it to surface. Retained because it is byte-identical, no slower,
+simpler, and it is the seam a Triton kernel replaces in Phase E.
+
+Also recorded in that module: the approach the plan recommended — "a
+preallocated destination buffer" — measured **0.93x, i.e. slower**, because
+writing through a transposed view has a worse access pattern than
+`permute().contiguous()`, which dispatches to an optimised copy. Written down so
+it is not re-attempted.
+
+**Tier 1b is the real tier-1 win** and fixes limitation §7.2. The old path copied
+each sequence three times per layer — gather, `F.pad`, `torch.cat` — costing
+46.8 ms and 640 MB *per decode step* at batch 8 / context 2048. Gathering
+straight into one preallocated left-padded buffer gives 1.28x at 512, 1.36x at
+1024, 1.32x at 2048. The earlier estimate of "2-3x" was wrong: it counted copies
+without weighting them, and the copy that remains is the scattered gather, which
+costs far more per byte than the two sequential copies removed.
+
+### 11.3 Tier 2 — paged decode is now faster than contiguous
+
+| Context | Contiguous | Paged | Paged + mirror | vs paged | **vs contiguous** | Mirror |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 512 | 12.38 | 11.96 | 13.57 | 1.135x | **1.096x** | 40.7 MB |
+| 2048 | 9.57 | 8.51 | 10.97 | 1.289x | **1.147x** | 160.7 MB |
+
+The engine re-gathered a sequence's entire context every step although one token
+had been added. An append-only contiguous mirror makes that `O(1)`, measured at
+**10.2x on the gather in isolation** and nearly flat in context (0.99 → 1.46 ms
+across a 16x increase, where rebuilding is linear).
+
+End to end it is 1.13-1.29x, and the gap to 10.2x is simply what fraction of a
+decode step the gather was. Both numbers are true; neither alone is the honest
+summary.
+
+**The cost is the reason it is opt-in.** The mirror is a contiguous copy of one
+sequence's KV — the thing paging exists to avoid — at 160 MB per sequence at
+2048 tokens. It is sized from `prompt + max_new_tokens` rather than
+`max_model_len`, released with the cache it belongs to, and does not touch the
+physical block pool, so prefix sharing's savings are unaffected. Enable it with
+`PagedCache(..., view_capacity=...)` when latency matters more than concurrency.
+
+Correctness: byte-identical output with **max absolute logit difference 0.0**,
+and the mirror is re-seeded from the pool on every event that can invalidate it
+— copy-on-write repointing a block, a prefix-cache hit seeding positions this
+sequence never wrote, speculative rollback, and reset. 15 tests.
+
+### 11.4 Tier 3 — the architecturally correct fix, proven not claimed
+
+`kernels/block_attention.py` computes attention one block at a time directly out
+of the pool with a running max and sum (the FlashAttention online-softmax
+formulation), so working memory is `O(block_size)` and the context is never
+materialised. It is the only tier with no memory cost.
+
+**It is not wired into the engine and is slower than tiers 1-2 on CPU**, because
+Python-level iteration over blocks pays interpreter overhead per block. That is
+expected: the structure pays off on a device that hides that overhead, and this
+loop body is what a Phase E Triton kernel ports.
+
+The deliverable is the equivalence proof — 19 tests covering partial final
+blocks at every length from 1 to 64, scattered unordered block tables,
+grouped-query attention at four head ratios, numerical stability with scores
+scaled 50x where a naive `sum(exp(scores))` overflows to `nan`, and working
+memory independence verified to 2048 tokens. Tolerance is `1e-5` rather than
+exact, which is correct here and nowhere else in this project: the online
+softmax rescales partial sums in a different association order than a fused
+softmax, so the two differ in floating-point rounding, not in value.
+
+### 11.5 What Phase A did not do
+
+- **Prefill is untouched.** The sweep's prefill times are unchanged
+  (1.427s vs 1.424s at 512; 6.512s vs 6.557s at 2048). Prefill reads the whole
+  prompt once by construction, so there is no redundant rebuild to remove.
+  Chunked prefill is Phase C.
+- **Tier 2 is off by default** and tier 3 is not wired in, so the engine's
+  default behaviour is tier 1 only. The headline 1.147x requires opting in.
+- **No GPU.** Every number here is CPU, and tier 3 exists largely so Phase E has
+  something to port.

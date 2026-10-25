@@ -253,6 +253,8 @@ either way, in the manner of §3.5 of the progress report.
 | 4 | `memforge_ml/runtime/decode_view_cache.py` | Tier 2: append-only per-sequence buffer with invalidation hooks | The 10.2×, and the one with a memory cost to defend |
 | 5 | `memforge_ml/kernels/block_attention.py` | Tier 3: reference online-softmax attention over blocks, with an equivalence test | Research; the equivalence proof is the deliverable |
 
+**All five delivered as of 2026-10-25.** Measured results in §A.4b.
+
 The plan lists the fused gather first and the in-place read second. Items 2 and 3
 invert that, because the in-place read is where the time actually goes.
 
@@ -335,12 +337,86 @@ weighting them. The copy that remains is the gather itself, a scattered read
 that costs far more per byte than the two sequential copies removed. My
 estimate, corrected by measurement.
 
-### What this leaves
+### Tier 2 — the measured win, and it beats contiguous outright
 
-Tier 1 is done and worth about 1.3x on the batched decode path. The headline
-`O(L)` to `O(1)` win is still entirely in **tier 2** (§A.3.2, measured at 10.2x
-on the gather in §A.2.3), which has a memory cost to defend, and the
-architecturally correct fix is still **tier 3** (§A.3.3). Neither is implemented.
+`memforge_ml/runtime/decode_view_cache.py`, opt-in via `PagedCache`'s
+`view_capacity`. Same sweep, all three paths interleaved so they see identical
+machine conditions:
+
+| Context | Contiguous | Paged | Paged + mirror | vs paged | **vs contiguous** | Mirror cost |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 512 | 12.38 | 11.96 | 13.57 | 1.135x | **1.096x** | 40.7 MB |
+| 2048 | 9.57 | 8.51 | 10.97 | 1.289x | **1.147x** | 160.7 MB |
+
+**Paged decode is now faster than stock contiguous**, 1.096x at 512 and 1.147x
+at 2048. That reframes the Phase A goal: the target was "within 5% of
+contiguous" and the result is comfortably past parity, with a wider margin than
+the baseline's noise band (see below).
+
+The end-to-end figure is 1.13-1.29x, not the 10.2x of §A.2.3, and the gap is
+simply what fraction of a decode step the gather was: the forward pass dominates
+on this model and hardware, so a 10x on one component is a 1.3x overall. Both
+numbers are true and neither alone is the honest summary.
+
+The cost is real and is the reason this is opt-in: 160 MB per sequence at 2048
+tokens. Sized from the request (`prompt + max_new_tokens`), not from
+`max_model_len`, which is what keeps it 160 MB rather than the ~84 MB-per-1024
+a model-limit-sized mirror would always reserve.
+
+**A note on the baseline's noise.** Across two runs the paged-vs-contiguous
+ratio at 2048 measured 0.971x and 0.890x — i.e. the "within 5%" verdict flips
+depending on the run. That is single-digit tok/s on a busy CPU and it is why
+§A.4b treats the bare criterion as weak evidence. The mirror's margin is large
+enough not to be noise-sensitive in the same way.
+
+### Tier 3 — correctness proven, performance deliberately not claimed
+
+`memforge_ml/kernels/block_attention.py`: attention computed one block at a time
+straight out of the pool, carrying a running max and sum (the FlashAttention
+online-softmax formulation), so working memory is `O(block_size)` and no context
+tensor is ever allocated. This is the only tier that costs no memory at all.
+
+It is **not wired into the engine and is slower than tiers 1-2 on CPU**, because
+Python-level iteration over blocks pays interpreter overhead per block that a
+single vectorised gather avoids. That is expected, and it is why §A.3.3 scoped
+this as research rather than a dated deliverable.
+
+What it does deliver is the equivalence proof, which is the artefact a Phase E
+Triton port would be checked against. 19 tests, all passing, covering:
+
+- every context length from 1 to 64, so **partial final blocks** are exercised —
+  a kernel reading a whole block regardless would mix unwritten slots into the
+  softmax and be wrong for every context that is not a multiple of 16;
+- scattered, unordered block tables, which is paging's actual premise;
+- grouped-query attention at 1:1, 1:2, 1:4 and 1:3 head ratios — GQA is the
+  normal case for the models this project runs, so a 1:1-only kernel would be
+  useless on the real target;
+- numerical stability with keys and queries scaled 50x, where a naive
+  `sum(exp(scores))` overflows to `inf` and then `nan`;
+- working memory independence from context, verified to 2048 tokens.
+
+Tolerance is `1e-5` rather than exact equality, and that is the one place in
+this project where exact is the wrong bar: the online softmax rescales partial
+sums in a different order from a single fused softmax, so the two differ in
+floating-point association, not in value. The reference accumulates in fp32 for
+the same reason.
+
+### Phase A, closed out
+
+| Tier | Delivered | Measured effect | Memory cost |
+| :--- | :--- | :--- | :--- |
+| 1a flattened gather | yes, on the hot path | ~1.2x isolated, **nil end to end** | none |
+| 1b batched assembly | yes, on the hot path | **1.28-1.36x** at batch 8 | none (replaces a per-step allocation) |
+| 2 append-only mirror | yes, opt-in | **1.13-1.29x**, beats contiguous | 40-160 MB per sequence |
+| 3 block-wise attention | reference + proof | slower on CPU, by design | none |
+
+The stated definition of done — within 5% of contiguous at 2048 — was already
+met before any of this, for the reasons in §A.4b. With tier 2 enabled the engine
+is 1.147x *faster* than contiguous at 2048, which is the stronger claim and the
+one worth making. The `O(L)` to `O(1)` limitation in
+`PROGRESS_AND_NEXT_PHASES.md` §7.1 is addressed by tier 2 for single-sequence
+decode and by tier 3 structurally; limitation §7.2, the batched round-trip, is
+addressed by tier 1b.
 
 ## A.5 Definition of done
 

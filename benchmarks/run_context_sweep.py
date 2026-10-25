@@ -39,7 +39,7 @@ import statistics
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -52,6 +52,7 @@ from transformers.cache_utils import DynamicCache  # noqa: E402
 from memforge_ml.model_defaults import DEFAULT_TARGET_MODEL  # noqa: E402
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine  # noqa: E402
 from memforge_ml.runtime.kv_pool import ModelKVSpec, PagedKVPool  # noqa: E402
+from memforge_ml.runtime.decode_view_cache import capacity_for  # noqa: E402
 from memforge_ml.runtime.paged_cache import PagedCache  # noqa: E402
 from memforge_ml.runtime.sampling import SamplingParams  # noqa: E402
 
@@ -109,7 +110,7 @@ def decode_contiguous(model, prompt_ids: List[int], steps: int) -> Dict[str, Any
 
 @torch.no_grad()
 def decode_paged(model, spec: ModelKVSpec, prompt_ids: List[int], steps: int,
-                 block_size: int) -> Dict[str, Any]:
+                 block_size: int, view_cache: bool = False) -> Dict[str, Any]:
     """
     The same decode loop through `PagedCache`.
 
@@ -120,7 +121,11 @@ def decode_paged(model, spec: ModelKVSpec, prompt_ids: List[int], steps: int,
     total = len(prompt_ids) + steps + 1
     num_blocks = (total + block_size - 1) // block_size + 1
     pool = PagedKVPool(spec, num_blocks=num_blocks, block_size=block_size)
-    cache = PagedCache(pool, list(range(num_blocks)))
+    cache = PagedCache(
+        pool,
+        list(range(num_blocks)),
+        view_capacity=capacity_for(len(prompt_ids), steps) if view_cache else None,
+    )
 
     ids = torch.tensor([prompt_ids], dtype=torch.long)
     t_prefill = time.perf_counter()
@@ -145,6 +150,9 @@ def decode_paged(model, spec: ModelKVSpec, prompt_ids: List[int], steps: int,
         "prefill_s": prefill_s,
         "decode_s": decode_s,
         "tok_per_s": steps / decode_s if decode_s > 0 else 0.0,
+        "view_cache_mb": (
+            cache.view_cache.describe()["mb"] if cache.view_cache else 0.0
+        ),
     }
 
 
@@ -201,6 +209,8 @@ def main() -> int:
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--kv-budget-mb", type=float, default=1024.0)
     parser.add_argument("--skip-batched", action="store_true")
+    parser.add_argument("--view-cache", action="store_true",
+                        help="also measure the append-only decode mirror (tier 2)")
     args = parser.parse_args()
 
     banner("MemForge Phase A — paged vs contiguous across context lengths")
@@ -229,14 +239,26 @@ def main() -> int:
         cont_rates, paged_rates = [], []
         cont_tokens = paged_tokens = None
         cont_prefill, paged_prefill = [], []
+        view_rates: List[float] = []
+        view_tokens = None
+        view_mb = 0.0
         for r in range(args.repeats):
             c = decode_contiguous(model, prompt, args.steps)
             p = decode_paged(model, spec, prompt, args.steps, args.block_size)
             cont_rates.append(c["tok_per_s"]); paged_rates.append(p["tok_per_s"])
             cont_prefill.append(c["prefill_s"]); paged_prefill.append(p["prefill_s"])
             cont_tokens, paged_tokens = c["tokens"], p["tokens"]
-            print(f"  repeat {r + 1}: contiguous {c['tok_per_s']:6.2f} tok/s | "
-                  f"paged {p['tok_per_s']:6.2f} tok/s")
+            line = (f"  repeat {r + 1}: contiguous {c['tok_per_s']:6.2f} tok/s | "
+                    f"paged {p['tok_per_s']:6.2f} tok/s")
+            if args.view_cache:
+                # Interleaved with the other two so all three see the same
+                # machine conditions.
+                vw = decode_paged(model, spec, prompt, args.steps, args.block_size,
+                                  view_cache=True)
+                view_rates.append(vw["tok_per_s"]); view_tokens = vw["tokens"]
+                view_mb = vw["view_cache_mb"]
+                line += f" | paged+mirror {vw['tok_per_s']:6.2f} tok/s"
+            print(line)
 
         cont = statistics.median(cont_rates)
         paged = statistics.median(paged_rates)
@@ -252,6 +274,13 @@ def main() -> int:
         print(f"  prefill median    : contiguous {statistics.median(cont_prefill):.3f}s | "
               f"paged {statistics.median(paged_prefill):.3f}s")
         print(f"  output identical  : {'YES' if identical else 'NO -- INVESTIGATE'}")
+        if args.view_cache and view_rates:
+            view = statistics.median(view_rates)
+            if view_tokens != cont_tokens:
+                mismatches.append(ctx)
+            print(f"  paged + mirror    : {view:.2f} tok/s "
+                  f"({view / paged:.3f}x vs paged, {view / cont:.3f}x vs contiguous), "
+                  f"costing {view_mb} MB")
 
         row: Dict[str, Any] = {
             "context_tokens": ctx,
@@ -265,6 +294,15 @@ def main() -> int:
             "contiguous_samples": [round(x, 3) for x in cont_rates],
             "paged_samples": [round(x, 3) for x in paged_rates],
         }
+        if args.view_cache and view_rates:
+            row["view_cache"] = {
+                "tok_per_s": round(statistics.median(view_rates), 3),
+                "vs_paged": round(statistics.median(view_rates) / paged, 4),
+                "vs_contiguous": round(statistics.median(view_rates) / cont, 4),
+                "mirror_mb": view_mb,
+                "output_identical": view_tokens == cont_tokens,
+                "samples": [round(x, 3) for x in view_rates],
+            }
 
         if not args.skip_batched:
             batched = decode_batched(model, tokenizer, prompt, args.concurrency,

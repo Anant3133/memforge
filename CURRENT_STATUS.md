@@ -173,7 +173,10 @@ bridge, and the API. All 7 pipeline stages pass via `python scripts/run_pipeline
 - [x] WebSocket streaming real tokens and real telemetry
 - [x] Frontend wired to live endpoints; typecheck and production build green
 - [x] Baseline and optimization metrics recorded in `benchmarks/results/live_engine.json`
-- [ ] Fused paged-attention kernel (Phase A)
+- [x] Fused paged-attention kernel (Phase A) — **done 2026-10-25**: flattened
+      gather, batched assembly without pad+cat, an opt-in append-only decode
+      mirror (**1.147x faster than contiguous** at 2048 tokens), and a
+      block-wise attention kernel with a 19-test equivalence proof
 - [x] Prefix sharing via copy-on-write (Phase B) — **done 2026-10-24**, see
       [PROGRESS_AND_NEXT_PHASES.md](PROGRESS_AND_NEXT_PHASES.md) §10
 - [ ] Chunked prefill (Phase C)

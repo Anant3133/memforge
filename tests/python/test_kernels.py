@@ -265,3 +265,31 @@ def test_assemble_batch_rejects_mismatched_inputs():
         assemble_batch(pool, buffers, [], [])
     with pytest.raises(ValueError, match="block tables"):
         assemble_batch(pool, buffers, [table], [4, 4])
+
+
+def test_scatter_kv_is_the_exact_inverse_of_gather_kv():
+    """
+    Direct coverage of the kernel pair, rather than only through the pool wrappers.
+
+    Gather, perturb, scatter, gather again: the second read must return exactly
+    what was written. A scatter that transposed differently from the gather would
+    round-trip wrong and nothing else here would notice.
+    """
+    pool = make_pool(num_blocks=12)
+    table = PagedKVPool.block_table_tensor([9, 4, 1], "cpu")
+    physical, slots = pool.slot_indices(table, 0, 11)
+    flat = flat_slot_index(physical, slots, BLOCK)
+
+    original_k, original_v = gather_kv(
+        pool.key_pool, pool.value_pool, 0, flat, BLOCK
+    )
+    new_k = original_k + 1.5
+    new_v = original_v - 0.25
+
+    scatter_kv(pool.key_pool, pool.value_pool, 0, flat, new_k, new_v, BLOCK)
+    got_k, got_v = gather_kv(pool.key_pool, pool.value_pool, 0, flat, BLOCK)
+
+    assert torch.equal(got_k, new_k)
+    assert torch.equal(got_v, new_v)
+    # Other layers must be untouched: the layer index has to be honoured.
+    assert not torch.equal(pool.key_pool[1], pool.key_pool[0])

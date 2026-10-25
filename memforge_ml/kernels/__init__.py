@@ -12,10 +12,26 @@ here is checked against them for byte-equality, because a wrong KV read does not
 crash: it produces fluent, confident, wrong text.
 """
 
+from memforge_ml.kernels.batched_decode import BatchedDecodeBuffers, assemble_batch
+from memforge_ml.kernels.block_attention import (
+    paged_attention_blockwise,
+    reference_attention,
+)
 from memforge_ml.kernels.paged_gather import (
     flat_slot_index,
     gather_kv,
     scatter_kv,
 )
 
-__all__ = ["flat_slot_index", "gather_kv", "scatter_kv"]
+__all__ = [
+    # tier 1a -- gather/scatter over a flattened pool view
+    "flat_slot_index",
+    "gather_kv",
+    "scatter_kv",
+    # tier 1b -- batched decode assembly without pad+cat
+    "BatchedDecodeBuffers",
+    "assemble_batch",
+    # tier 3 -- block-wise attention, never materialising the context
+    "paged_attention_blockwise",
+    "reference_attention",
+]
