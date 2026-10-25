@@ -13,10 +13,11 @@ from rich.table import Table
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from memforge_ml.baseline.naive_runner import NaiveBaselineRunner
+from memforge_ml.model_defaults import DEFAULT_TARGET_MODEL as DEFAULT_MODEL
 
 console = Console()
 
-def run_benchmark(model_name: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0", max_tokens: int = 100):
+def run_benchmark(model_name: str = DEFAULT_MODEL, max_tokens: int = 100):
     console.print(f"[bold cyan]Running MemForge Naive Baseline Benchmark[/bold cyan] on model: [yellow]{model_name}[/yellow]")
 
     runner = NaiveBaselineRunner(model_name=model_name)
@@ -55,7 +56,7 @@ def run_benchmark(model_name: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0", max_to
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run MemForge Baseline Benchmark")
-    parser.add_argument("--model", type=str, default="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+    parser.add_argument("--model", type=str, default=DEFAULT_MODEL)
     parser.add_argument("--tokens", type=int, default=64)
     args = parser.parse_args()
     run_benchmark(model_name=args.model, max_tokens=args.tokens)

@@ -3,8 +3,7 @@ Engine Bridge: Connects C++ Core Engine (BlockAllocator & Continuous Scheduler)
 with the Python PyTorch Execution Layer. Provides pure-Python fallback if C++ extension is not yet compiled.
 """
 
-from typing import List, Dict, Any, Optional
-import time
+from typing import List, Dict, Any
 
 try:
     import memforge_c
@@ -42,6 +41,17 @@ class PyFallbackBlockAllocator:
 
     def get_utilization_ratio(self) -> float:
         return len(self.allocated_blocks) / self.total_blocks if self.total_blocks > 0 else 0.0
+
+    def reset(self) -> None:
+        """
+        Return every block to the pool.
+
+        Present so this fallback matches the C++ allocator's surface: callers
+        such as benchmarks/run_paged_kv.py use `reset()` and must not break on
+        a checkout without the native extension built.
+        """
+        self.free_blocks = list(range(self.total_blocks))
+        self.allocated_blocks = set()
 
 
 class MemForgeEngineBridge:

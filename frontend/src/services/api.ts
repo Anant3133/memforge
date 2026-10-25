@@ -194,22 +194,18 @@ export async function sendChatCompletion(
   return response.json();
 }
 
-export function fetchMetrics(): Promise<string> {
-  return fetch('/metrics').then((r) => {
-    if (!r.ok) throw new Error(`/metrics failed: ${r.status}`);
-    return r.text();
-  });
-}
-
-/** Parse the Prometheus text exposition at /metrics into a flat map. */
-export function parseMetrics(text: string): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const line of text.split('\n')) {
-    if (!line || line.startsWith('#')) continue;
-    const spaceAt = line.indexOf(' ');
-    if (spaceAt === -1) continue;
-    const value = Number(line.slice(spaceAt + 1));
-    if (!Number.isNaN(value)) out[line.slice(0, spaceAt)] = value;
-  }
-  return out;
+/**
+ * Poll engine state over REST.
+ *
+ * The dashboard normally gets this pushed over `/ws/telemetry`, which is
+ * cheaper and more timely. This is the fallback for when that socket is down --
+ * a proxy that blocks WebSocket upgrades, or a reconnect in progress -- so the
+ * memory map and gauges keep moving instead of freezing at their last value.
+ */
+export async function pollEngineState(): Promise<{
+  telemetry: EngineTelemetry;
+  blocks: BlockMap;
+}> {
+  const [telemetry, blocks] = await Promise.all([fetchTelemetry(), fetchBlockMap()]);
+  return { telemetry, blocks };
 }

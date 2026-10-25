@@ -21,6 +21,11 @@ def run_paged_kv_benchmark(num_sequences: int = 100, max_blocks_per_seq: int = 3
 
     bridge = MemForgeEngineBridge(total_blocks=4096, block_size=16)
 
+    # Start from a known-clean pool. The allocator is reused across the
+    # allocate and free phases below, so resetting here means the numbers do
+    # not depend on whatever state a previous call left behind.
+    bridge.allocator.reset()
+
     # Measure allocation latency
     start_t = time.perf_counter()
     allocated_seqs = {}

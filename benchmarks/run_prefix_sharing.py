@@ -41,10 +41,13 @@ if str(PROJECT_ROOT) not in sys.path:
 import torch  # noqa: E402
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
+from memforge_ml.model_defaults import DEFAULT_TARGET_MODEL  # noqa: E402
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine  # noqa: E402
 from memforge_ml.runtime.sampling import SamplingParams  # noqa: E402
 
-DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-360M-Instruct"
+# Shared with the server and every other benchmark, so a run cannot
+# silently measure a different model than the one being served.
+DEFAULT_MODEL = DEFAULT_TARGET_MODEL
 RESULTS_PATH = PROJECT_ROOT / "benchmarks" / "results" / "prefix_sharing.json"
 
 

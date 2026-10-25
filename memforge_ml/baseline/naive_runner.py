@@ -9,11 +9,13 @@ import torch
 from typing import Dict, Any, List, Optional
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from memforge_ml.model_defaults import DEFAULT_TARGET_MODEL as DEFAULT_MODEL
+
 
 class NaiveBaselineRunner:
     def __init__(
         self,
-        model_name: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        model_name: str = DEFAULT_MODEL,
         device: Optional[str] = None,
         torch_dtype: Optional[torch.dtype] = None,
     ):

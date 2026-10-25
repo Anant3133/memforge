@@ -1,5 +1,4 @@
 import torch
-import pytest
 from memforge_ml.speculative.rejection_sampler import RejectionSampler
 
 

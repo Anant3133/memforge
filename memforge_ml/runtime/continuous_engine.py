@@ -22,7 +22,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Deque, Dict, List, Optional, Sequence as SeqType
+from typing import Any, Deque, Dict, List, Optional
 
 import torch
 import torch.nn.functional as F

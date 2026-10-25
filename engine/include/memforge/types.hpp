@@ -20,7 +20,8 @@ constexpr size_t DEFAULT_BLOCK_SIZE = 16;
 enum class SequenceStatus {
     WAITING,    // Queued, awaiting block allocation and scheduler slot
     RUNNING,    // Active in continuous batching iteration pool
-    SWAPPED,    // Temporarily evicted / swapped to host memory (if under memory pressure)
+    SWAPPED,    // Reserved. Preemption is by recomputation, not host swapping,
+                // so nothing currently sets this; see PROGRESS_AND_NEXT_PHASES.md §4.
     FINISHED,   // Generation reached EOS or max_tokens limit
     ABORTED     // Cancelled by client or errored
 };
@@ -32,7 +33,6 @@ struct PhysicalBlock {
     BlockId block_id{INVALID_BLOCK_ID};
     int ref_count{0};
     bool is_allocated{false};
-    uint64_t last_accessed_timestamp{0};
     /// Chained prefix hash this block is registered under in the PrefixCache,
     /// or 0 when it is not shareable. `hash_block()` never returns 0, so the
     /// sentinel is unambiguous.
@@ -69,16 +69,6 @@ struct SchedulerStepResult {
     size_t total_blocks{0};
     size_t num_waiting{0};
     double memory_utilization_ratio{0.0};
-};
-
-/**
- * @brief Engine configuration options.
- */
-struct EngineConfig {
-    size_t block_size{DEFAULT_BLOCK_SIZE};
-    size_t num_gpu_blocks{1024};
-    size_t max_num_seqs{256};
-    size_t max_model_len{4096};
 };
 
 } // namespace memforge

@@ -14,7 +14,6 @@ import pytest
 import torch
 
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine
-from memforge_ml.runtime.kv_pool import PagedKVPool
 from memforge_ml.runtime.prefix_sharing import block_owners, copy_block
 from memforge_ml.runtime.sampling import SamplingParams
 

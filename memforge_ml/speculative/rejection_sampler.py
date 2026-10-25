@@ -5,7 +5,7 @@ while accepting tokens proposed by the Draft model Q(x).
 """
 
 import torch
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 
 class RejectionSampler:

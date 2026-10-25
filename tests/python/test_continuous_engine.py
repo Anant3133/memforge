@@ -7,7 +7,6 @@ the batched decode path giving the same answers as the sequential one.
 """
 
 import pytest
-import torch
 
 from memforge_ml.runtime.continuous_engine import HAS_CPP_ENGINE, ContinuousBatchingEngine
 from memforge_ml.runtime.sampling import SamplingParams

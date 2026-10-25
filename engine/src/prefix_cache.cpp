@@ -58,7 +58,6 @@ std::vector<BlockId> PrefixCache::acquire_shared_prefix(const std::vector<TokenI
         }
 
         acquired.push_back(cached.block_id);
-        it->second.last_hit_timestamp = ++clock_;
         hits_++;
         parent = h;
     }
@@ -107,7 +106,6 @@ size_t PrefixCache::register_full_blocks(const std::vector<TokenId>& tokens,
         entry.block_id = id;
         entry.block_hash = h;
         entry.tokens.assign(begin, begin + block_size_);
-        entry.last_hit_timestamp = ++clock_;
 
         by_hash_.emplace(h, std::move(entry));
         by_block_.emplace(id, h);

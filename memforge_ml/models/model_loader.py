@@ -3,7 +3,6 @@ Model Loader: Handles Hugging Face weights, tokenizers, and fallback mechanisms
 for both Target and Draft models.
 """
 
-import os
 import torch
 from typing import Tuple, Optional
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer

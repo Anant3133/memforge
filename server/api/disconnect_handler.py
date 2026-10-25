@@ -102,36 +102,3 @@ async def run_cancellable(
         # Let the cancellation settle so no "task was destroyed but it is
         # pending" warning leaks out of the event loop.
         await asyncio.gather(work_task, return_exceptions=True)
-
-
-class AbortGuard:
-    """
-    Abort a sequence unless the guarded block completed normally.
-
-    Covers the paths where the work is already running and we only need to make
-    sure an early exit -- a disconnect, an exception, a cancellation -- does not
-    leave the sequence generating into nothing.
-
-        async with AbortGuard(engine.abort, seq_id) as guard:
-            ...
-            guard.release()   # finished cleanly; do not abort
-    """
-
-    def __init__(self, abort: Callable[[int], Any], seq_id: int):
-        self._abort = abort
-        self._seq_id = seq_id
-        self._released = False
-
-    def release(self) -> None:
-        self._released = True
-
-    async def __aenter__(self) -> "AbortGuard":
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb) -> bool:
-        if not self._released:
-            try:
-                self._abort(self._seq_id)
-            except Exception:
-                pass
-        return False  # never swallow the original exception

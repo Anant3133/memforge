@@ -54,7 +54,6 @@ public:
     // Queue query methods
     size_t get_num_waiting() const;
     size_t get_num_running() const;
-    size_t get_num_finished() const;
     bool has_unfinished_sequences() const;
 
     SequencePtr get_sequence(SequenceId seq_id);

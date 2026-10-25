@@ -5,7 +5,7 @@ to achieve 2x-3x generation speedup with lossless mathematical equivalence.
 
 import time
 import torch
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from memforge_ml.speculative.draft_runner import DraftRunner

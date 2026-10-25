@@ -6,14 +6,12 @@ measuring GPU bubble reduction and throughput improvement.
 
 import sys
 import os
-import time
 import random
 from rich.console import Console
 from rich.table import Table
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from memforge_ml.engine_bridge import MemForgeEngineBridge
 
 console = Console()
 

@@ -217,4 +217,4 @@ npm run dev
 
 ---
 
-For full 9-week timeline details and mathematical specifications, refer to [MEMFORGE_PLAN.md](file:///c:/Users/Anant/memforge/MEMFORGE_PLAN.md) and [CURRENT_STATUS.md](file:///c:/Users/Anant/memforge/CURRENT_STATUS.md).
+For full 9-week timeline details and mathematical specifications, refer to [MEMFORGE_PLAN.md](MEMFORGE_PLAN.md) and [CURRENT_STATUS.md](CURRENT_STATUS.md).

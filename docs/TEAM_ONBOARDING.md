@@ -56,7 +56,7 @@ source .venv/bin/activate          # macOS / Linux
 ```
 
 Your prompt should now start with `(.venv)`. If PowerShell refuses with an
-execution-policy error, see [§7.6](#76-powershell-refuses-to-activate-the-venv).
+execution-policy error, see [§7.7](#77-powershell-refuses-to-activate-the-venv).
 
 ### 2.3 Install the Python dependencies
 
@@ -367,7 +367,39 @@ Get-NetTCPConnection -LocalPort 8000 -State Listen |
   ForEach-Object { Stop-Process -Id $_ -Force }
 ```
 
-### 7.5 The server seems dead on startup
+### 7.5 You edited C++, rebuilt, and nothing changed
+
+`python setup.py build_ext --inplace` reports success, but your change has no
+effect — tests still exercise the old behaviour.
+
+On Windows, a running Python process holds `memforge_c.*.pyd` open, so the
+**copy step fails silently**: the new extension lands in
+`build/lib.win-amd64-cpython-312/` and the copy to the repo root is skipped.
+You are importing a stale binary. Confirmed here with an orphaned process left
+behind by an earlier test run, which held the lock for hours.
+
+Check the timestamps:
+
+```bash
+ls -la memforge_c*.pyd build/lib.win-amd64-cpython-312/*.pyd
+```
+
+If the root copy is older, something is holding it. Find and stop it, then copy
+by hand:
+
+```powershell
+Get-Process python | Where-Object {
+  $_.Modules.ModuleName -contains "memforge_c.cp312-win_amd64.pyd"
+} | Stop-Process -Force
+Copy-Item "build\lib.win-amd64-cpython-312\memforge_c.cp312-win_amd64.pyd" `
+          "memforge_c.cp312-win_amd64.pyd" -Force
+```
+
+Header-only changes have a related trap: setuptools does not track header
+dependencies, so editing a `.hpp` alone may not trigger a rebuild at all. Use
+`--force` when you have only touched headers.
+
+### 7.6 The server seems dead on startup
 
 `/v1/health` returns `"engine_ready": false` and requests fail.
 
@@ -381,7 +413,7 @@ until curl -s http://127.0.0.1:8000/v1/health | grep -q '"engine_ready":true'; d
 If `load_error` is non-null in the health response, that is a real failure — the
 weights are probably not downloaded. See §2.5.
 
-### 7.6 PowerShell refuses to activate the venv
+### 7.7 PowerShell refuses to activate the venv
 
 ```
 Activate.ps1 cannot be loaded because running scripts is disabled on this system
@@ -393,7 +425,7 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
 Or just use Git Bash with `source .venv/Scripts/activate`.
 
-### 7.7 Tests pass but the server behaves differently
+### 7.8 Tests pass but the server behaves differently
 
 Almost always an environment variable. They are read **at import time**, so a
 variable set after start-up has no effect, and one left over in your shell
@@ -405,14 +437,14 @@ curl -s http://127.0.0.1:8000/v1/engine/status | python -m json.tool
 
 The `config` block in that response is the truth.
 
-### 7.8 "No module named memforge_ml" / "No module named server"
+### 7.9 "No module named memforge_ml" / "No module named server"
 
 You are running from the wrong directory, or the venv is not active. Both are
 fixed by running from the repo root with the venv activated. `pyproject.toml`
 sets `pythonpath = ["."]` for pytest, but a bare `python somescript.py` needs
 the working directory to be the repo root.
 
-### 7.9 Everything is confusing
+### 7.10 Everything is confusing
 
 ```bash
 python scripts/check_env.py

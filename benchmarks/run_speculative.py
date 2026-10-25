@@ -12,15 +12,18 @@ from rich.table import Table
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from memforge_ml.model_defaults import (
+    DEFAULT_DRAFT_MODEL as DEFAULT_DRAFT,
+    DEFAULT_TARGET_MODEL as DEFAULT_TARGET,
+)
 from memforge_ml.models.model_loader import ModelLoader
 from memforge_ml.speculative.spec_engine import SpeculativeEngine
-from memforge_ml.baseline.naive_runner import NaiveBaselineRunner
 
 console = Console()
 
 def run_speculative_benchmark(
-    target_model_name: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-    draft_model_name: str = "HuggingFaceTB/SmolLM-135M",
+    target_model_name: str = DEFAULT_TARGET,
+    draft_model_name: str = DEFAULT_DRAFT,
     max_tokens: int = 64,
 ):
     console.print("[bold cyan]Running MemForge Speculative Decoding Benchmark[/bold cyan]")
@@ -62,8 +65,8 @@ def run_speculative_benchmark(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Speculative Decoding Benchmark")
-    parser.add_argument("--target", type=str, default="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
-    parser.add_argument("--draft", type=str, default="HuggingFaceTB/SmolLM-135M")
+    parser.add_argument("--target", type=str, default=DEFAULT_TARGET)
+    parser.add_argument("--draft", type=str, default=DEFAULT_DRAFT)
     parser.add_argument("--tokens", type=int, default=64)
     args = parser.parse_args()
     run_speculative_benchmark(target_model_name=args.target, draft_model_name=args.draft, max_tokens=args.tokens)

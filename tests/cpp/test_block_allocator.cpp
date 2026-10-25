@@ -51,7 +51,12 @@ void test_sequence_capacity() {
     assert(ok);
     assert(seq.get_num_allocated_blocks() == 2);
 
-    allocator.free_sequence(seq);
+    // free_sequence reports which blocks actually reached ref_count 0, so a
+    // caller cannot forget to evict them from the PrefixCache. Both of this
+    // sequence's blocks are private, so both come back.
+    std::vector<BlockId> freed = allocator.free_sequence(seq);
+    assert(freed.size() == 2);
+    assert(seq.get_num_allocated_blocks() == 0);
     assert(allocator.get_num_free_blocks() == 10);
     std::cout << "test_sequence_capacity PASSED." << std::endl;
 }

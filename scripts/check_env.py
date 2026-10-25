@@ -41,8 +41,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 OK, WARN, FAIL = "OK", "WARN", "FAIL"
 
-TARGET_MODEL = "HuggingFaceTB/SmolLM2-360M-Instruct"
-DRAFT_MODEL = "HuggingFaceTB/SmolLM2-135M-Instruct"
+# Resolved lazily in probe_models(): this script must keep working when the
+# project is not importable (no venv, extension unbuilt), which is exactly
+# when someone runs it. Falls back to the same literals as
+# memforge_ml/model_defaults.py.
+TARGET_MODEL_ENV = "MEMFORGE_TARGET_MODEL"
+DRAFT_MODEL_ENV = "MEMFORGE_DRAFT_MODEL"
+TARGET_MODEL = os.environ.get(TARGET_MODEL_ENV, "HuggingFaceTB/SmolLM2-360M-Instruct")
+DRAFT_MODEL = os.environ.get(DRAFT_MODEL_ENV, "HuggingFaceTB/SmolLM2-135M-Instruct")
 
 # Packages whose absence breaks something concrete, with what it breaks.
 REQUIRED_PACKAGES = {

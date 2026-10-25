@@ -8,7 +8,13 @@ import { PrefixVisualizer } from './components/PrefixVisualizer';
 import { BenchmarkView, RequestTiming, TelemetrySample } from './components/BenchmarkView';
 import { StatusBanner, ConnectionState } from './components/StatusBanner';
 import { StreamClient, TelemetryClient, StreamEvent, TelemetryEvent } from './services/websocket';
-import { fetchHealth, fetchEngineStatus } from './services/api';
+import {
+  EngineBusyError,
+  fetchEngineStatus,
+  fetchHealth,
+  pollEngineState,
+  sendChatCompletion,
+} from './services/api';
 
 /** Telemetry arrives every 0.4 s, so this is roughly a 48-second window. */
 const MAX_SAMPLES = 120;
@@ -136,6 +142,48 @@ export const App: React.FC = () => {
     return () => window.clearInterval(timer);
   }, []);
 
+  // REST fallback. The telemetry socket is the normal path; this only runs
+  // while it is not live, so a blocked WebSocket upgrade or a reconnect in
+  // progress leaves the dashboard updating slowly rather than frozen.
+  useEffect(() => {
+    if (connection === 'live') return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const { telemetry: t, blocks } = await pollEngineState();
+        if (cancelled) return;
+        setEngineReady(true);
+        setLastUpdate(Date.now());
+        setTokensPerSec(t.tokens_per_second);
+        setTokensPerForwardPass(t.tokens_per_forward_pass);
+        setMemoryUtilization(t.memory_utilization);
+        setRunningSequences(t.running_sequences);
+        setWaitingSequences(t.waiting_sequences);
+        setBlockSize(t.block_size);
+        setOccupancy(blocks.occupancy);
+        setBlockOwners(blocks.block_owners ?? {});
+        setTotalBlocks(t.total_blocks);
+        setSharedBlocks(t.shared_blocks);
+        setBlocksSaved(t.blocks_saved);
+        setMemorySavedMb(t.memory_saved_mb);
+        setPrefixHitRate(t.prefix_hit_rate);
+        setCachedPrefixBlocks(t.cached_prefix_blocks);
+        setPrefixSharingEnabled(t.prefix_sharing_enabled);
+        setInFlight(t.in_flight);
+        setMaxConcurrency(t.max_concurrency);
+      } catch {
+        // The socket path owns error reporting; a failed poll just means the
+        // engine is still unavailable, which the banner already shows.
+      }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [connection]);
+
   // Token stream.
   useEffect(() => {
     const client = new StreamClient();
@@ -257,7 +305,35 @@ export const App: React.FC = () => {
       firstTokenRef.current = null;
       lastTokenRef.current = null;
       interTokenGapsRef.current = [];
-      streamRef.current?.sendPrompt({ prompt, maxTokens, useSpeculative });
+
+      if (streamRef.current?.isOpen) {
+        streamRef.current.sendPrompt({ prompt, maxTokens, useSpeculative });
+        return;
+      }
+
+      // No stream socket: fall back to the OpenAI-compatible REST endpoint so
+      // the prompt still gets an answer, just without token-by-token display.
+      void (async () => {
+        try {
+          const response = await sendChatCompletion(
+            [{ role: 'user', content: prompt }],
+            useSpeculative,
+            maxTokens
+          );
+          const content = response.choices[0]?.message.content ?? '';
+          setTokens([{ token: content, source: 'target' }]);
+        } catch (e) {
+          if (e instanceof EngineBusyError) {
+            setError(
+              `engine busy, retry in ${e.retryAfterSeconds}s (${e.message})`
+            );
+          } else {
+            setError(e instanceof Error ? e.message : String(e));
+          }
+        } finally {
+          setIsStreaming(false);
+        }
+      })();
     },
     [useSpeculative]
   );

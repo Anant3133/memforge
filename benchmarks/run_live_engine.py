@@ -44,8 +44,10 @@ from memforge_ml.runtime.kv_pool import ModelKVSpec, PagedKVPool  # noqa: E402
 from memforge_ml.runtime.sampling import SamplingParams  # noqa: E402
 from memforge_ml.runtime.speculative_runtime import PagedSpeculativeEngine  # noqa: E402
 
-DEFAULT_TARGET = os.environ.get("MEMFORGE_TARGET_MODEL", "HuggingFaceTB/SmolLM2-360M-Instruct")
-DEFAULT_DRAFT = os.environ.get("MEMFORGE_DRAFT_MODEL", "HuggingFaceTB/SmolLM2-135M-Instruct")
+from memforge_ml.model_defaults import (  # noqa: E402
+    DEFAULT_DRAFT_MODEL as DEFAULT_DRAFT,
+    DEFAULT_TARGET_MODEL as DEFAULT_TARGET,
+)
 
 PROMPTS = [
     "Virtual memory lets an operating system",

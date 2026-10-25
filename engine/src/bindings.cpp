@@ -46,14 +46,6 @@ PYBIND11_MODULE(memforge_c, m) {
         .def_readwrite("total_blocks", &SchedulerStepResult::total_blocks)
         .def_readwrite("memory_utilization_ratio", &SchedulerStepResult::memory_utilization_ratio);
 
-    // EngineConfig struct
-    py::class_<EngineConfig>(m, "EngineConfig")
-        .def(py::init<>())
-        .def_readwrite("block_size", &EngineConfig::block_size)
-        .def_readwrite("num_gpu_blocks", &EngineConfig::num_gpu_blocks)
-        .def_readwrite("max_num_seqs", &EngineConfig::max_num_seqs)
-        .def_readwrite("max_model_len", &EngineConfig::max_model_len);
-
     // Sequence class
     py::class_<Sequence, SequencePtr>(m, "Sequence")
         .def(py::init<SequenceId, std::vector<TokenId>, size_t, size_t>(),
@@ -141,7 +133,6 @@ PYBIND11_MODULE(memforge_c, m) {
         .def("abort_sequence", &Scheduler::abort_sequence)
         .def("get_num_waiting", &Scheduler::get_num_waiting)
         .def("get_num_running", &Scheduler::get_num_running)
-        .def("get_num_finished", &Scheduler::get_num_finished)
         .def("has_unfinished_sequences", &Scheduler::has_unfinished_sequences)
         .def("get_sequence", &Scheduler::get_sequence)
         .def("get_allocator", &Scheduler::get_allocator)

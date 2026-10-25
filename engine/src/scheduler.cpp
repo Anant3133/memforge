@@ -12,12 +12,11 @@ Scheduler::Scheduler(std::shared_ptr<BlockAllocator> allocator, size_t max_num_s
 }
 
 void Scheduler::release_sequence_blocks(Sequence& seq) {
-    // release() reports only the blocks whose ref_count actually reached zero.
-    // A shared block released here stays allocated for whoever else references
-    // it, which is why preemption no longer evicts a prefix another sequence is
-    // still reading.
-    std::vector<BlockId> freed = allocator_->release(seq.get_block_table());
-    seq.clear_blocks();
+    // free_sequence() reports only the blocks whose ref_count actually reached
+    // zero. A shared block released here stays allocated for whoever else
+    // references it, which is why preemption no longer evicts a prefix another
+    // sequence is still reading.
+    std::vector<BlockId> freed = allocator_->free_sequence(seq);
     if (prefix_cache_ && !freed.empty()) {
         // Mandatory: a block back on the free list must stop being discoverable
         // under its old prefix hash, or it will later be served to a sequence
@@ -219,17 +218,6 @@ size_t Scheduler::get_num_waiting() const {
 size_t Scheduler::get_num_running() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return running_queue_.size();
-}
-
-size_t Scheduler::get_num_finished() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    size_t count = 0;
-    for (const auto& pair : all_sequences_) {
-        if (pair.second->is_finished()) {
-            count++;
-        }
-    }
-    return count;
 }
 
 bool Scheduler::has_unfinished_sequences() const {

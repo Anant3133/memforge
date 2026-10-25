@@ -63,7 +63,6 @@ struct CachedBlock {
     BlockId block_id{INVALID_BLOCK_ID};
     uint64_t block_hash{0};
     std::vector<TokenId> tokens;
-    uint64_t last_hit_timestamp{0};
 };
 
 /**
@@ -177,7 +176,6 @@ private:
 
     uint64_t hits_{0};
     uint64_t misses_{0};
-    uint64_t clock_{0};  // monotonic counter for LRU ordering (stage 2)
 
     mutable std::mutex mutex_;
 };

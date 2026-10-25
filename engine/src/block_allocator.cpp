@@ -181,9 +181,10 @@ size_t BlockAllocator::get_num_blocks_saved() const {
     return refs - allocated;
 }
 
-void BlockAllocator::free_sequence(Sequence& seq) {
-    free_blocks(seq.get_block_table());
+std::vector<BlockId> BlockAllocator::free_sequence(Sequence& seq) {
+    std::vector<BlockId> freed = release(seq.get_block_table());
     seq.clear_blocks();
+    return freed;
 }
 
 bool BlockAllocator::ensure_capacity(Sequence& seq) {

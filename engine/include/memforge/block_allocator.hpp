@@ -54,9 +54,16 @@ public:
     void free_blocks(const std::vector<BlockId>& block_ids);
 
     /**
-     * @brief Frees all blocks associated with a sequence.
+     * @brief Frees all blocks associated with a sequence and clears its table.
+     *
+     * Returns the ids whose ref_count actually reached 0, for the same reason
+     * `release()` does: with prefix sharing, a sequence's blocks may be shared,
+     * and a caller that frees them without telling the PrefixCache leaves
+     * registry entries pointing at blocks the allocator has handed to someone
+     * else. Returning the list is what stops a caller silently forgetting --
+     * it used to return void, which made that mistake invisible.
      */
-    void free_sequence(Sequence& seq);
+    std::vector<BlockId> free_sequence(Sequence& seq);
 
     /**
      * @brief Ensures a sequence has enough physical blocks for its current token length.
