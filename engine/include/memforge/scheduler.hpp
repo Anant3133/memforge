@@ -26,8 +26,18 @@ public:
      *        optional so the benchmark can measure both paths in one process and
      *        so sharing can be switched off if it ever misbehaves in the field.
      */
+    /**
+     * @param max_prefill_tokens_per_step Chunked prefill budget (Phase C).
+     *        0 means unlimited -- a prompt is prefilled in one step, which is
+     *        the original behaviour. Any positive value caps how many prompt
+     *        tokens are processed per step, so a 2,000-token prompt arriving
+     *        cannot stall the decode steps of requests already in flight.
+     *        Decode is never charged against this budget: a running sequence
+     *        emits its token every step regardless, which is the whole point.
+     */
     Scheduler(std::shared_ptr<BlockAllocator> allocator, size_t max_num_seqs = 256,
-              std::shared_ptr<PrefixCache> prefix_cache = nullptr);
+              std::shared_ptr<PrefixCache> prefix_cache = nullptr,
+              size_t max_prefill_tokens_per_step = 0);
     ~Scheduler() = default;
 
     /**
@@ -60,6 +70,9 @@ public:
     std::shared_ptr<BlockAllocator> get_allocator() const { return allocator_; }
     std::shared_ptr<PrefixCache> get_prefix_cache() const { return prefix_cache_; }
     bool prefix_sharing_enabled() const { return prefix_cache_ != nullptr; }
+    size_t get_max_prefill_tokens_per_step() const { return max_prefill_tokens_per_step_; }
+    void set_max_prefill_tokens_per_step(size_t n) { max_prefill_tokens_per_step_ = n; }
+    bool chunked_prefill_enabled() const { return max_prefill_tokens_per_step_ > 0; }
 
 private:
     /**
@@ -74,6 +87,7 @@ private:
     std::shared_ptr<BlockAllocator> allocator_;
     std::shared_ptr<PrefixCache> prefix_cache_;  // null => sharing disabled
     size_t max_num_seqs_;
+    size_t max_prefill_tokens_per_step_{0};  // 0 => unlimited
 
     std::deque<SequencePtr> waiting_queue_;
     std::vector<SequencePtr> running_queue_;

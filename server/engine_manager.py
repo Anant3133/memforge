@@ -120,6 +120,7 @@ class EngineManager:
             decode_view_cache=cfg.decode_view_cache,
             view_cache_budget_mb=cfg.view_cache_budget_mb,
             block_attention=cfg.block_attention,
+            max_prefill_tokens_per_step=cfg.max_prefill_tokens_per_step,
         )
         pool = self.engine.pool.describe()
         LOGGER.info(

@@ -50,11 +50,18 @@ struct SequenceStepInfo {
     size_t total_length{0};
     SequenceStatus status{SequenceStatus::WAITING};
     bool is_prefill{false}; // True if running initial prompt prefill, false if decoding single token
-    /// Leading tokens whose KV is already resident in the pool via a prefix-cache
-    /// hit, so the prefill forward pass must skip them and start at this offset.
-    /// 0 means "prefill the whole sequence", which is the pre-prefix-sharing
-    /// behaviour and what every non-sharing path reports.
+    /// Leading tokens whose KV is already resident in the pool, so the prefill
+    /// forward pass must skip them and start at this offset. Resident either
+    /// because a prefix-cache hit supplied them (Phase B) or because an earlier
+    /// chunk of this sequence's own prefill wrote them (Phase C). 0 means start
+    /// from the beginning.
     size_t num_cached_tokens{0};
+    /// Exclusive end of the prompt range this step should prefill, so a long
+    /// prompt is spread across steps instead of monopolising one. Equal to
+    /// `num_cached_tokens` when no budget was left this step, which means "do
+    /// nothing for this sequence now"; equal to `total_length` on the final
+    /// chunk, which is the only chunk that produces a token.
+    size_t prefill_chunk_end{0};
 };
 
 /**

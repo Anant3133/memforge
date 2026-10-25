@@ -128,6 +128,7 @@ class ContinuousBatchingEngine:
         decode_view_cache: bool = False,
         view_cache_budget_mb: float = 512.0,
         block_attention: bool = False,
+        max_prefill_tokens_per_step: int = 0,
     ):
         if not HAS_CPP_ENGINE:
             raise RuntimeError(
@@ -175,7 +176,15 @@ class ContinuousBatchingEngine:
         self.prefix_cache = (
             memforge_c.PrefixCache(self.allocator, block_size) if enable_prefix_sharing else None
         )
-        self.scheduler = memforge_c.Scheduler(self.allocator, max_num_seqs, self.prefix_cache)
+        # Chunked prefill (Phase C). 0 means unlimited, i.e. a prompt is
+        # prefilled in one step -- the original behaviour.
+        self.max_prefill_tokens_per_step = max(0, int(max_prefill_tokens_per_step))
+        self.scheduler = memforge_c.Scheduler(
+            self.allocator,
+            max_num_seqs,
+            self.prefix_cache,
+            self.max_prefill_tokens_per_step,
+        )
 
         # Tier 3 has to be installed on the model, not just enabled on the
         # engine, and registration can fail on a transformers without the
@@ -203,6 +212,7 @@ class ContinuousBatchingEngine:
         self.total_preemptions = 0
         self.total_cached_prefix_tokens = 0   # prefill tokens skipped via a hit
         self.total_cow_copies = 0
+        self.total_prefill_chunks = 0
         self.engine_started_at = time.perf_counter()
 
         # Aborts arrive from whatever thread the server's event loop runs on,
@@ -240,6 +250,8 @@ class ContinuousBatchingEngine:
             "prefix_sharing": self.prefix_cache is not None,
             "decode_view_cache": self.decode_view_cache,
             "block_attention": self.block_attention,
+            "max_prefill_tokens_per_step": self.max_prefill_tokens_per_step,
+            "chunked_prefill": self.max_prefill_tokens_per_step > 0,
             "view_cache_budget_mb": round(
                 self.view_cache_budget_bytes / (1024 * 1024), 2
             ),
@@ -470,19 +482,36 @@ class ContinuousBatchingEngine:
         rt.cache.begin_step(block_table)
         rt.num_prefills += 1
 
-        # Leading tokens whose KV a prefix-cache hit already put in the pool.
-        # The scheduler guarantees this is strictly less than the sequence
-        # length (it withholds the final full block), so the suffix below is
-        # never empty -- a zero-length forward pass is undefined. The clamp is
-        # belt-and-braces against that invariant ever being relaxed.
+        # Where this step's prefill starts: tokens already resident, either from
+        # a prefix-cache hit (Phase B) or from an earlier chunk of this
+        # sequence's own prefill (Phase C).
         cached = int(getattr(info, "num_cached_tokens", 0) or 0)
-        if cached >= len(rt.tokens):
-            cached = 0
+        total = len(rt.tokens)
 
-        # On a fresh request this is just the prompt; after a preemption it is
-        # prompt + everything generated so far, recomputed in one pass. Either
-        # way, only the uncached suffix goes through the model.
-        suffix = rt.tokens[cached:] if cached else rt.tokens
+        # Where it ends. The scheduler caps this when chunked prefill is on, so
+        # a long prompt is spread over steps instead of monopolising one.
+        chunk_end = int(getattr(info, "prefill_chunk_end", 0) or 0)
+        if chunk_end <= 0 or chunk_end > total:
+            # Older scheduler, or an unchunked step: do the whole remainder.
+            chunk_end = total
+        if cached >= total:
+            # Nothing resident can exceed the sequence; recompute from scratch
+            # rather than attempt a zero-length forward pass, which is undefined.
+            cached, chunk_end = 0, total
+
+        if chunk_end <= cached:
+            # The prefill budget ran out this step. The sequence stays running
+            # and resumes next step; emitting nothing now is the point of
+            # chunking, since it is what leaves the budget for decodes.
+            rt.num_prefills -= 1
+            return None
+
+        is_final_chunk = chunk_end >= total
+
+        # On a fresh request this is the prompt; after a preemption it is prompt
+        # plus everything generated so far. Either way only this chunk goes
+        # through the model.
+        suffix = rt.tokens[cached:chunk_end]
         ids = torch.tensor([suffix], dtype=torch.long, device=self.device)
 
         extra: Dict[str, Any] = {}
@@ -500,7 +529,7 @@ class ContinuousBatchingEngine:
             # anyway: this is the one place where the engine knows the absolute
             # offset for certain, and stating it costs nothing and does not
             # depend on how a future transformers release infers it.
-            positions = torch.arange(cached, len(rt.tokens), device=self.device)
+            positions = torch.arange(cached, chunk_end, device=self.device)
             extra["position_ids"] = positions.unsqueeze(0)
             extra["cache_position"] = positions
 
@@ -510,13 +539,21 @@ class ContinuousBatchingEngine:
         self.total_prefill_tokens += len(suffix)
         self.total_cached_prefix_tokens += cached
 
-        # The whole sequence is resident now: the prefix was already there and
-        # the suffix has just been written. Only now is it safe to advertise
-        # these blocks for reuse -- registering before the KV exists would serve
-        # the next sequence a block full of zeros.
+        if not is_final_chunk:
+            # Mid-prefill: the logits here are for a token in the middle of the
+            # prompt, not a continuation, so sampling from them would emit
+            # garbage. The sequence produces its first token only once the whole
+            # prompt is resident.
+            self.total_prefill_chunks += 1
+            return None
+
+        # The whole sequence is resident now. Only at this point is it safe to
+        # advertise these blocks for reuse -- registering a partially prefilled
+        # sequence would serve the next one blocks whose KV is still zeros.
         if self.prefix_cache is not None:
             self.prefix_cache.register_full_blocks(rt.tokens, block_table)
 
+        self.total_prefill_chunks += 1
         token_id = sample_logits(out.logits[0, -1], rt.params, rt.generator)
         return self._accept_token(rt, token_id, source="target")
 
@@ -796,6 +833,9 @@ class ContinuousBatchingEngine:
             "preemptions": self.total_preemptions,
             "cached_prefix_tokens": self.total_cached_prefix_tokens,
             "cow_copies": self.total_cow_copies,
+            "prefill_chunks": self.total_prefill_chunks,
+            "chunked_prefill_enabled": self.max_prefill_tokens_per_step > 0,
+            "max_prefill_tokens_per_step": self.max_prefill_tokens_per_step,
             "decode_view_cache_enabled": self.decode_view_cache,
             "block_attention_enabled": self.block_attention,
             "blockwise_layer_calls": self.total_blockwise_layers,

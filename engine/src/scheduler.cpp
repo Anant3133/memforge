@@ -5,10 +5,12 @@
 namespace memforge {
 
 Scheduler::Scheduler(std::shared_ptr<BlockAllocator> allocator, size_t max_num_seqs,
-                     std::shared_ptr<PrefixCache> prefix_cache)
+                     std::shared_ptr<PrefixCache> prefix_cache,
+                     size_t max_prefill_tokens_per_step)
     : allocator_(std::move(allocator))
     , prefix_cache_(std::move(prefix_cache))
-    , max_num_seqs_(max_num_seqs) {
+    , max_num_seqs_(max_num_seqs)
+    , max_prefill_tokens_per_step_(max_prefill_tokens_per_step) {
 }
 
 void Scheduler::release_sequence_blocks(Sequence& seq) {
@@ -149,6 +151,15 @@ SchedulerStepResult Scheduler::step() {
     }
 
     // 3. Build step result metadata for active sequences
+    //
+    // Chunked prefill (Phase C) lives here. Decode costs one token per
+    // sequence and is never charged against the budget, so an in-flight
+    // request keeps emitting a token every step no matter how long a prompt
+    // arrives behind it. Whatever budget is left is handed to prefilling
+    // sequences in queue order.
+    size_t prefill_budget = max_prefill_tokens_per_step_;
+    const bool chunked = max_prefill_tokens_per_step_ > 0;
+
     result.running_sequences.reserve(running_queue_.size());
     for (auto& seq : running_queue_) {
         SequenceStepInfo info;
@@ -160,9 +171,28 @@ SchedulerStepResult Scheduler::step() {
         info.status = seq->get_status();
         info.is_prefill = !seq->has_completed_prefill();
         info.num_cached_tokens = seq->get_num_cached_tokens();
+        info.prefill_chunk_end = info.total_length;
 
         if (info.is_prefill) {
-            seq->mark_prefill_completed();
+            const size_t start = info.num_cached_tokens;
+            const size_t remaining = start >= info.total_length
+                                         ? 0
+                                         : info.total_length - start;
+            size_t chunk = remaining;
+            if (chunked) {
+                chunk = remaining < prefill_budget ? remaining : prefill_budget;
+                prefill_budget -= chunk;
+            }
+            info.prefill_chunk_end = start + chunk;
+
+            // Only the chunk that reaches the end of the prompt completes the
+            // prefill, and only a completed prefill produces a token. A
+            // zero-length chunk means the budget ran out this step: the
+            // sequence stays in the running queue and resumes next step.
+            seq->set_num_cached_tokens(info.prefill_chunk_end);
+            if (info.prefill_chunk_end >= info.total_length) {
+                seq->mark_prefill_completed();
+            }
         }
 
         result.running_sequences.push_back(info);

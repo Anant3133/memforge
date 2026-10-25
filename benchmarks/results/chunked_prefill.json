@@ -1,0 +1,139 @@
+{
+  "benchmark": "chunked_prefill",
+  "phase": "C",
+  "generated_at": "2026-10-26T02:39:05",
+  "platform": {
+    "system": "Windows",
+    "python": "3.12.7",
+    "torch": "2.13.0+cpu",
+    "device": "cpu"
+  },
+  "config": {
+    "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+    "prompt_tokens": 512,
+    "victim_prompt_tokens": 32,
+    "victim_tokens": 14,
+    "budgets": [
+      0,
+      16,
+      8,
+      4
+    ],
+    "block_size": 16
+  },
+  "verdict": "Phase C target (long prompt does not stall in-flight decoding): NOT MET -- worst gap is 2.54x the victim's median at budget 4 (was 15.96x unlimited)",
+  "rows": [
+    {
+      "budget": 0,
+      "victim_tokens": 14,
+      "steps": 15,
+      "gaps_ms": [
+        100.827,
+        104.204,
+        97.972,
+        1609.537,
+        194.421,
+        145.078,
+        106.682,
+        96.976,
+        98.949,
+        94.831,
+        96.136,
+        102.964,
+        97.586
+      ],
+      "median_before_ms": 100.827,
+      "median_after_ms": 100.956,
+      "p99_ms": 1439.723,
+      "max_ms": 1609.537,
+      "stall_ratio": 15.96,
+      "p99_ratio": 14.28,
+      "intruder_ttft_ms": 1609.5,
+      "prefill_chunks": 2
+    },
+    {
+      "budget": 16,
+      "victim_tokens": 14,
+      "steps": 39,
+      "gaps_ms": [
+        110.986,
+        116.367,
+        95.559,
+        241.624,
+        239.712,
+        242.062,
+        238.387,
+        243.189,
+        244.281,
+        246.537,
+        289.633,
+        391.078,
+        376.251
+      ],
+      "median_before_ms": 110.986,
+      "median_after_ms": 243.735,
+      "p99_ms": 389.298,
+      "max_ms": 391.078,
+      "stall_ratio": 3.52,
+      "p99_ratio": 3.51,
+      "intruder_ttft_ms": 6200.1,
+      "prefill_chunks": 34
+    },
+    {
+      "budget": 8,
+      "victim_tokens": 14,
+      "steps": 73,
+      "gaps_ms": [
+        85.366,
+        86.108,
+        92.447,
+        200.974,
+        209.157,
+        204.613,
+        206.845,
+        202.03,
+        196.042,
+        221.282,
+        180.37,
+        187.312,
+        180.707
+      ],
+      "median_before_ms": 86.108,
+      "median_after_ms": 201.502,
+      "p99_ms": 219.827,
+      "max_ms": 221.282,
+      "stall_ratio": 2.57,
+      "p99_ratio": 2.55,
+      "intruder_ttft_ms": 8656.3,
+      "prefill_chunks": 68
+    },
+    {
+      "budget": 4,
+      "victim_tokens": 14,
+      "steps": 141,
+      "gaps_ms": [
+        76.255,
+        81.49,
+        91.668,
+        207.042,
+        191.278,
+        191.65,
+        185.906,
+        182.95,
+        180.958,
+        179.367,
+        187.239,
+        181.879,
+        184.272
+      ],
+      "median_before_ms": 81.49,
+      "median_after_ms": 185.089,
+      "p99_ms": 205.195,
+      "max_ms": 207.042,
+      "stall_ratio": 2.54,
+      "p99_ratio": 2.52,
+      "intruder_ttft_ms": 15552.9,
+      "prefill_chunks": 136
+    }
+  ]
+}

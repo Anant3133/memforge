@@ -32,7 +32,8 @@ PYBIND11_MODULE(memforge_c, m) {
         .def_readwrite("total_length", &SequenceStepInfo::total_length)
         .def_readwrite("status", &SequenceStepInfo::status)
         .def_readwrite("is_prefill", &SequenceStepInfo::is_prefill)
-        .def_readwrite("num_cached_tokens", &SequenceStepInfo::num_cached_tokens);
+        .def_readwrite("num_cached_tokens", &SequenceStepInfo::num_cached_tokens)
+        .def_readwrite("prefill_chunk_end", &SequenceStepInfo::prefill_chunk_end);
 
     // SchedulerStepResult struct
     py::class_<SchedulerStepResult>(m, "SchedulerStepResult")
@@ -65,6 +66,7 @@ PYBIND11_MODULE(memforge_c, m) {
         .def("has_completed_prefill", &Sequence::has_completed_prefill)
         .def("reset_prefill", &Sequence::reset_prefill)
         .def("get_num_cached_tokens", &Sequence::get_num_cached_tokens)
+        .def("get_num_unprefilled_tokens", &Sequence::get_num_unprefilled_tokens)
         .def("set_num_cached_tokens", &Sequence::set_num_cached_tokens)
         .def("is_finished", &Sequence::is_finished)
         .def("finish", &Sequence::finish);
@@ -124,9 +126,11 @@ PYBIND11_MODULE(memforge_c, m) {
 
     // Scheduler class
     py::class_<Scheduler, std::shared_ptr<Scheduler>>(m, "Scheduler")
-        .def(py::init<std::shared_ptr<BlockAllocator>, size_t, std::shared_ptr<PrefixCache>>(),
+        .def(py::init<std::shared_ptr<BlockAllocator>, size_t,
+                      std::shared_ptr<PrefixCache>, size_t>(),
              py::arg("allocator"), py::arg("max_num_seqs") = 256,
-             py::arg("prefix_cache") = nullptr)
+             py::arg("prefix_cache") = nullptr,
+             py::arg("max_prefill_tokens_per_step") = 0)
         .def("add_sequence", &Scheduler::add_sequence)
         .def("step", &Scheduler::step)
         .def("update_sequence", &Scheduler::update_sequence)
@@ -137,5 +141,8 @@ PYBIND11_MODULE(memforge_c, m) {
         .def("get_sequence", &Scheduler::get_sequence)
         .def("get_allocator", &Scheduler::get_allocator)
         .def("get_prefix_cache", &Scheduler::get_prefix_cache)
-        .def("prefix_sharing_enabled", &Scheduler::prefix_sharing_enabled);
+        .def("prefix_sharing_enabled", &Scheduler::prefix_sharing_enabled)
+        .def("get_max_prefill_tokens_per_step", &Scheduler::get_max_prefill_tokens_per_step)
+        .def("set_max_prefill_tokens_per_step", &Scheduler::set_max_prefill_tokens_per_step)
+        .def("chunked_prefill_enabled", &Scheduler::chunked_prefill_enabled);
 }

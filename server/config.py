@@ -68,6 +68,13 @@ class ServerConfig(BaseModel):
     # kernel would take. Mutually exclusive with the decode mirror.
     block_attention: bool = _env_bool("MEMFORGE_BLOCK_ATTENTION", False)
 
+    # Phase C: chunked prefill. 0 means a prompt is prefilled in a single
+    # step, which is the original behaviour and lets one long prompt stall
+    # every decode behind it. A positive value caps prompt tokens processed
+    # per step; decode is never charged against it, so requests already in
+    # flight keep emitting a token every step.
+    max_prefill_tokens_per_step: int = _env_int("MEMFORGE_MAX_PREFILL_TOKENS_PER_STEP", 0)
+
     # Toggles. Loading the draft model costs extra memory, so it is opt-out.
     load_draft_model: bool = _env_bool("MEMFORGE_LOAD_DRAFT", True)
     eager_load: bool = _env_bool("MEMFORGE_EAGER_LOAD", True)

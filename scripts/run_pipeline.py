@@ -492,7 +492,17 @@ def main():
             title="[bold red]Pipeline Status: INCOMPLETE[/bold red]",
             border_style="red"
         ))
+        console.print(
+            "  failed stages: "
+            + escape(", ".join(name for name, ok, _, _ in summary_results if not ok))
+        )
+
+    # The exit status has to reflect the verdict, and it did not: main() returned
+    # nothing, so this script exited 0 even when the summary printed INCOMPLETE.
+    # Anything gating on it -- CI, a pre-push hook, a teammate's shell -- would
+    # have treated a failed pipeline as a pass.
+    return 0 if all_passed else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

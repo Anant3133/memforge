@@ -52,6 +52,11 @@ public:
     // must therefore NOT be recomputed (or rewritten) by the prefill pass.
     size_t get_num_cached_tokens() const { return num_cached_tokens_; }
     void set_num_cached_tokens(size_t n) { num_cached_tokens_ = n; }
+    /// Tokens still to prefill before this sequence can emit anything.
+    size_t get_num_unprefilled_tokens() const {
+        const size_t total = get_total_len();
+        return num_cached_tokens_ >= total ? 0 : total - num_cached_tokens_;
+    }
 
 private:
     SequenceId id_;
