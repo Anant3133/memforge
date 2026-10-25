@@ -25,9 +25,9 @@ from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, List, Optional
 
 import torch
-import torch.nn.functional as F
 from transformers.cache_utils import DynamicCache
 
+from memforge_ml.kernels.batched_decode import BatchedDecodeBuffers, assemble_batch
 from memforge_ml.runtime.kv_pool import ModelKVSpec, PagedKVPool
 from memforge_ml.runtime.paged_cache import PagedCache
 from memforge_ml.runtime.prefix_sharing import block_owners, copy_block, sharing_telemetry
@@ -138,6 +138,11 @@ class ContinuousBatchingEngine:
         if num_blocks is None:
             num_blocks = PagedKVPool.blocks_for_budget(self.spec, block_size, kv_budget_mb)
         self.pool = PagedKVPool(self.spec, num_blocks=num_blocks, block_size=block_size)
+
+        # Reusable batch scratch for the decode path. Shape-cached, so a
+        # context growing one token per step does not reallocate a buffer
+        # pair every step -- which was most of the cost it removes.
+        self.decode_buffers = BatchedDecodeBuffers(self.spec.num_layers)
 
         self.allocator = memforge_c.BlockAllocator(num_blocks, block_size)
         # Prefix sharing is opt-out so A/B benchmarking stays possible in one
@@ -495,36 +500,33 @@ class ContinuousBatchingEngine:
             return self._run_decode_sequential(infos)
 
         ctx_lens = [rt.cache.position for rt in rts]
-        max_len = max(ctx_lens)
         batch = len(rts)
 
-        read_idx = [rt.cache.indices(0, n) for rt, n in zip(rts, ctx_lens)]
+        # Gather every sequence directly into one preallocated, left-padded
+        # buffer. The previous path copied each sequence three times per layer
+        # -- gather, F.pad, torch.cat -- which measured 46.8 ms and 640 MB per
+        # step at batch 8 / context 2048. Here padding is the region nobody
+        # wrote and concatenation never happens.
+        block_tables = [rt.cache.block_table_tensor_cached() for rt in rts]
+        layer_data, batch_mask, padded_len = assemble_batch(
+            self.pool, self.decode_buffers, block_tables, ctx_lens
+        )
 
-        layer_data = []
-        for layer_idx in range(self.spec.num_layers):
-            keys, values = [], []
-            for (phys, slots), n in zip(read_idx, ctx_lens):
-                k, v = self.pool.gather(layer_idx, phys, slots)
-                pad = max_len - n
-                if pad:
-                    k = F.pad(k, (0, 0, pad, 0))
-                    v = F.pad(v, (0, 0, pad, 0))
-                keys.append(k)
-                values.append(v)
-            layer_data.append((torch.cat(keys, dim=0), torch.cat(values, dim=0)))
-
-        # A throwaway contiguous cache seeded from the paged pool: the model sees a
-        # normal batched cache, while the pool stays the source of truth.
+        # The model sees an ordinary batched cache; the pool stays the source of
+        # truth and the new K/V is scattered back into it after the pass.
         cache = DynamicCache(ddp_cache_data=layer_data)
 
         input_ids = torch.tensor(
             [[rt.tokens[-1]] for rt in rts], dtype=torch.long, device=self.device
         )
-        attention_mask = torch.zeros((batch, max_len + 1), dtype=torch.long, device=self.device)
-        for i, n in enumerate(ctx_lens):
-            attention_mask[i, max_len - n :] = 1
+        # One extra column for the token being generated this step.
+        attention_mask = torch.zeros(
+            (batch, padded_len + 1), dtype=torch.long, device=self.device
+        )
+        attention_mask[:, :padded_len] = batch_mask
+        attention_mask[:, padded_len] = 1
         position_ids = torch.tensor([[n] for n in ctx_lens], dtype=torch.long, device=self.device)
-        cache_position = torch.arange(max_len, max_len + 1, device=self.device)
+        cache_position = torch.arange(padded_len, padded_len + 1, device=self.device)
 
         with torch.no_grad():
             out = self.model(

@@ -53,12 +53,15 @@ class PagedCacheLayer(CacheLayerMixin):
         num_new = key_states.shape[-2]
         start, end = self.position, self.position + num_new
 
-        write_phys, write_slots = self.owner.indices(start, end)
-        self.owner.pool.write(self.layer_idx, write_phys, write_slots, key_states, value_states)
+        # Flat indices: one index_select / index_copy_ per tensor instead of a
+        # two-dimensional advanced index. Memoised across layers, so the
+        # translation is paid once per step rather than 32 times.
+        write_index = self.owner.flat_indices(start, end)
+        self.owner.pool.write_flat(self.layer_idx, write_index, key_states, value_states)
         self.position = end
 
-        read_phys, read_slots = self.owner.indices(0, end)
-        return self.owner.pool.gather(self.layer_idx, read_phys, read_slots)
+        read_index = self.owner.flat_indices(0, end)
+        return self.owner.pool.gather_flat(self.layer_idx, read_index)
 
     def get_mask_sizes(self, query_length: int) -> Tuple[int, int]:
         return self.position + query_length, 0
@@ -90,6 +93,7 @@ class PagedCache(Cache):
         self.device_str = device or pool.spec.device
         self._block_table: torch.Tensor = PagedKVPool.block_table_tensor(block_table, self.device_str)
         self._index_memo: Dict[Tuple[int, int], Tuple[torch.Tensor, torch.Tensor]] = {}
+        self._flat_memo: Dict[Tuple[int, int], torch.Tensor] = {}
         super().__init__(layers=[PagedCacheLayer(self, i) for i in range(pool.spec.num_layers)])
 
     # ------------------------------------------------------- engine interface
@@ -101,11 +105,13 @@ class PagedCache(Cache):
         ):
             self._block_table = PagedKVPool.block_table_tensor(block_table, self.device_str)
             self._index_memo.clear()
+            self._flat_memo.clear()
 
     def begin_step(self, block_table: Optional[List[int]] = None) -> None:
         if block_table is not None:
             self.set_block_table(block_table)
         self._index_memo.clear()
+        self._flat_memo.clear()
 
     def seed_position(self, num_cached_tokens: int) -> None:
         """
@@ -125,6 +131,7 @@ class PagedCache(Cache):
         for layer in self.layers:
             layer.position = num_cached_tokens
         self._index_memo.clear()
+        self._flat_memo.clear()
 
     def indices(self, start: int, end: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """Index translation for token range [start, end), memoized across layers."""
@@ -133,9 +140,33 @@ class PagedCache(Cache):
             self._index_memo[key] = self.pool.slot_indices(self._block_table, start, end)
         return self._index_memo[key]
 
+    def flat_indices(self, start: int, end: int) -> torch.Tensor:
+        """
+        Flattened pool offsets for [start, end), memoized across layers.
+
+        Separate memo from `indices` because the two forms are used by different
+        callers: the batched decode path still needs (physical, slots) pairs,
+        while the per-layer read wants the collapsed offset.
+        """
+        key = (start, end)
+        if key not in self._flat_memo:
+            self._flat_memo[key] = self.pool.flat_indices(self._block_table, start, end)
+        return self._flat_memo[key]
+
     @property
     def block_table(self) -> List[int]:
         return self._block_table.tolist()
+
+    def block_table_tensor_cached(self) -> torch.Tensor:
+        """
+        The block table as the tensor it is already stored as.
+
+        `block_table` returns a Python list, which the batched decode path would
+        immediately have to turn back into a tensor once per sequence per step.
+        This hands out the existing tensor instead. Treat it as read-only --
+        mutating it would desynchronise the cache from the C++ block table.
+        """
+        return self._block_table
 
     @property
     def position(self) -> int:
@@ -152,11 +183,13 @@ class PagedCache(Cache):
         for layer in self.layers:
             layer.crop(num_tokens)
         self._index_memo.clear()
+        self._flat_memo.clear()
 
     def reset(self) -> None:
         for layer in self.layers:
             layer.reset()
         self._index_memo.clear()
+        self._flat_memo.clear()
 
     def num_blocks_needed(self, total_tokens: int) -> int:
         bs = self.pool.block_size

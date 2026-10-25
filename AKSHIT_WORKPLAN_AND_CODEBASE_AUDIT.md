@@ -256,6 +256,92 @@ either way, in the manner of §3.5 of the progress report.
 The plan lists the fused gather first and the in-place read second. Items 2 and 3
 invert that, because the in-place read is where the time actually goes.
 
+## A.4b Measured results of tiers 1a and 1b (implemented 2026-10-25)
+
+Both shipped. Output byte-identical throughout. The results are not what §A.3
+predicted, in both directions.
+
+### The Phase A definition of done was already met, before any optimisation
+
+Baseline sweep (`run_context_sweep.py`, SmolLM2-360M, fp32, CPU, medians of 3
+interleaved repeats), taken **before** either kernel landed:
+
+| Context | Contiguous tok/s | Paged tok/s | Relative | Within 5%? |
+| ---: | ---: | ---: | ---: | :--- |
+| 128 | 13.50 | 12.42 | 0.920 | no |
+| 512 | 12.49 | 12.02 | 0.962 | yes |
+| 1024 | 10.38 | 10.74 | 1.034 | yes |
+| 2048 | 8.23 | 7.99 | **0.971** | **yes** |
+
+**"Paged throughput within 5% of contiguous at 2,048 tokens" was already true.**
+It had simply never been measured at 2048 — the existing comparison in
+`run_live_engine.py` is taken at roughly 40 tokens of context.
+
+**Why the criterion is weak, which matters more than the result.** The baseline
+it compares against is `DynamicCache`, which *also* concatenates its whole
+context on every decode step. Both paths are `O(context)`:
+
+| Context | Contiguous slowdown vs 128 | Paged slowdown vs 128 |
+| ---: | ---: | ---: |
+| 512 | 1.08x | 1.03x |
+| 1024 | 1.30x | 1.16x |
+| 2048 | **1.64x** | **1.55x** |
+
+The ratio stays near 1.0 because both degrade together. So the definition of
+done measures paged-vs-contiguous *parity*, not absolute efficiency, and is
+structurally insensitive to the `O(L)` to `O(1)` problem that limitation §7.1
+describes. A target that cannot fail for the reason it was written is worth
+saying out loud rather than banking.
+
+### Tier 1a — correct, and no measurable end-to-end effect
+
+`memforge_ml/kernels/paged_gather.py`, wired into `PagedCacheLayer.update`.
+In isolation the flattened `index_select` is the predicted ~1.2x faster. End to
+end, across the same sweep:
+
+| Context | Paged before | Paged after | Delta |
+| ---: | ---: | ---: | ---: |
+| 128 | 12.42 | 12.49 | 1.006x |
+| 512 | 12.02 | 11.33 | 0.943x |
+| 1024 | 10.74 | 10.44 | 0.972x |
+| 2048 | 7.99 | 8.35 | 1.045x |
+
+**That is noise, not a speedup.** The gather is not a large enough share of a
+single-sequence decode step on this model for a 1.2x on it to surface above
+run-to-run variance.
+
+Kept regardless: it is byte-identical, no slower, simpler than the
+two-dimensional advanced index it replaced, and it is the seam a Triton kernel
+would substitute into in Phase E. But it is not a performance win and is not
+claimed as one.
+
+### Tier 1b — a real 1.3x, where §A.3.1 predicted 2-3x
+
+`memforge_ml/kernels/batched_decode.py`, replacing gather → `F.pad` →
+`torch.cat` with a gather straight into one preallocated, left-padded buffer.
+Measured against the exact code it replaced, same pool, same indices:
+
+| Batch | Context | Old pad+cat | New preallocated | Speedup |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 512 | 39.3 ms | 37.0 ms | 1.06x |
+| 8 | 512 | 88.3 ms | 68.7 ms | **1.28x** |
+| 8 | 1024 | 143.8 ms | 105.5 ms | **1.36x** |
+| 8 | 2048 | 293.2 ms | 221.5 ms | **1.32x** |
+
+Consistent and real, and it removes the 640 MB-per-step copy that motivated it.
+But **§A.3.1's estimate of "roughly 2-3x" was too optimistic and is wrong.**
+The reasoning there — "removes 2 of the 3 copies" — counted copies without
+weighting them. The copy that remains is the gather itself, a scattered read
+that costs far more per byte than the two sequential copies removed. My
+estimate, corrected by measurement.
+
+### What this leaves
+
+Tier 1 is done and worth about 1.3x on the batched decode path. The headline
+`O(L)` to `O(1)` win is still entirely in **tier 2** (§A.3.2, measured at 10.2x
+on the gather in §A.2.3), which has a memory cost to defend, and the
+architecturally correct fix is still **tier 3** (§A.3.3). Neither is implemented.
+
 ## A.5 Definition of done
 
 **Non-negotiable, for every tier:**

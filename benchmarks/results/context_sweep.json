@@ -1,0 +1,145 @@
+{
+  "benchmark": "context_sweep",
+  "phase": "A",
+  "generated_at": "2026-10-25T10:22:15",
+  "platform": {
+    "system": "Windows",
+    "python": "3.12.7",
+    "torch": "2.13.0+cpu",
+    "device": "cpu"
+  },
+  "config": {
+    "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+    "contexts": [
+      128,
+      512,
+      1024,
+      2048
+    ],
+    "steps": 8,
+    "repeats": 3,
+    "block_size": 16,
+    "concurrency": 4
+  },
+  "model_geometry": {
+    "num_layers": 32,
+    "num_kv_heads": 5,
+    "head_dim": 64,
+    "bytes_per_token": 81920
+  },
+  "all_outputs_identical": true,
+  "rows": [
+    {
+      "context_tokens": 128,
+      "contiguous_tok_per_s": 14.104,
+      "paged_tok_per_s": 12.492,
+      "relative_throughput": 0.8857,
+      "within_5_percent": false,
+      "contiguous_prefill_s": 0.464,
+      "paged_prefill_s": 0.48,
+      "output_identical": true,
+      "contiguous_samples": [
+        13.758,
+        14.418,
+        14.104
+      ],
+      "paged_samples": [
+        12.492,
+        12.211,
+        12.813
+      ],
+      "batched": {
+        "concurrency": 4,
+        "wall_s": 2.84,
+        "tokens": 32,
+        "tok_per_s": 11.27,
+        "tokens_per_forward_pass": 2.909,
+        "forward_passes": 11
+      }
+    },
+    {
+      "context_tokens": 512,
+      "contiguous_tok_per_s": 12.006,
+      "paged_tok_per_s": 11.332,
+      "relative_throughput": 0.9438,
+      "within_5_percent": false,
+      "contiguous_prefill_s": 1.4902,
+      "paged_prefill_s": 1.4894,
+      "output_identical": true,
+      "contiguous_samples": [
+        12.006,
+        12.064,
+        11.331
+      ],
+      "paged_samples": [
+        11.031,
+        11.558,
+        11.332
+      ],
+      "batched": {
+        "concurrency": 4,
+        "wall_s": 7.701,
+        "tokens": 32,
+        "tok_per_s": 4.16,
+        "tokens_per_forward_pass": 2.909,
+        "forward_passes": 11
+      }
+    },
+    {
+      "context_tokens": 1024,
+      "contiguous_tok_per_s": 10.224,
+      "paged_tok_per_s": 10.442,
+      "relative_throughput": 1.0214,
+      "within_5_percent": true,
+      "contiguous_prefill_s": 3.185,
+      "paged_prefill_s": 3.3042,
+      "output_identical": true,
+      "contiguous_samples": [
+        9.607,
+        10.224,
+        10.29
+      ],
+      "paged_samples": [
+        8.622,
+        10.735,
+        10.442
+      ],
+      "batched": {
+        "concurrency": 4,
+        "wall_s": 15.372,
+        "tokens": 32,
+        "tok_per_s": 2.08,
+        "tokens_per_forward_pass": 2.909,
+        "forward_passes": 11
+      }
+    },
+    {
+      "context_tokens": 2048,
+      "contiguous_tok_per_s": 8.484,
+      "paged_tok_per_s": 8.352,
+      "relative_throughput": 0.9844,
+      "within_5_percent": true,
+      "contiguous_prefill_s": 7.06,
+      "paged_prefill_s": 7.1826,
+      "output_identical": true,
+      "contiguous_samples": [
+        8.484,
+        8.051,
+        8.584
+      ],
+      "paged_samples": [
+        8.519,
+        5.928,
+        8.352
+      ],
+      "batched": {
+        "concurrency": 4,
+        "wall_s": 38.099,
+        "tokens": 32,
+        "tok_per_s": 0.84,
+        "tokens_per_forward_pass": 2.909,
+        "forward_passes": 11
+      }
+    }
+  ]
+}
