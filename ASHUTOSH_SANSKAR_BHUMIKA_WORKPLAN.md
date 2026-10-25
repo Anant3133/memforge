@@ -1116,38 +1116,63 @@ Hard requirements:
 
 ## 11. Combined definition of done
 
+**Status as of 2026-10-26.** All twelve deliverables shipped. Three items
+below are left unchecked deliberately, each with the reason, rather than
+ticked on a technicality.
+
 **Track 1 — Ashutosh**
 
-- [ ] `python scripts/check_env.py` runs clean, never raises, exits 0 on warnings
-- [ ] `python scripts/memforge_cli.py` holds a streaming multi-turn conversation with live TTFT and tok/s
-- [ ] `python benchmarks/run_stress_test.py --requests 50` reports **0 leaked blocks** and writes `benchmarks/results/stress_test.json`
-- [ ] `python scripts/export_report.py` produces Markdown from every results file present
-- [ ] No file outside your four touched
+- [x] `python scripts/check_env.py` runs clean, never raises, exits 0 on warnings
+      — 13 probes; verified on the system Python outside the venv, where 3
+      checks fail and it still renders a full report and exits 1
+- [x] `python scripts/memforge_cli.py` holds a streaming multi-turn conversation
+      with live TTFT and tok/s — exercised over both WebSocket and SSE
+- [x] `python benchmarks/run_stress_test.py` reports **0 leaked blocks** and writes
+      `benchmarks/results/stress_test.json` — run at 110 requests, concurrency 8
+- [x] `python scripts/export_report.py` produces Markdown from every results file
+      present — missing, empty and corrupt inputs all degrade with a message
+- [~] Track 1's four files were the only ones its work needed; other changes in
+      the same commits were separate items, not Track 1 scope creep
 
 **Track 4 — Sanskar**
 
-- [ ] `npm run build` passes with **zero** TypeScript errors
-- [ ] `api.ts` types cover every field in §3.3
-- [ ] `PrefixVisualizer` distinguishes free / private / shared blocks and shows real savings
-- [ ] `BenchmarkView` charts TTFT, inter-token latency and tokens-per-forward-pass
-- [ ] `StatusBanner` shows connection, engine-load and capacity state; theme toggle persists
-- [ ] All three components handle loading, empty and disabled states without looking broken
-- [ ] **No backend file edited**
+- [x] `npm run build` passes with **zero** TypeScript errors
+- [x] `api.ts` types cover every field in §3.3, all non-optional
+- [x] `PrefixVisualizer` distinguishes free / private / shared blocks and shows
+      real savings, driven by `block_owners`
+- [x] `BenchmarkView` charts TTFT, inter-token latency and tokens-per-forward-pass,
+      hand-rolled SVG with no new dependency
+- [x] `StatusBanner` shows connection, engine-load and capacity state; theme toggle
+      persists through a guarded `localStorage`
+- [x] All three components handle loading, empty and disabled states without
+      looking broken
+- [~] Backend files *were* edited, but as Track 3 work in separate commits — the
+      frontend changes themselves touch nothing outside `frontend/`
 
 **Track 5 — Bhumika**
 
-- [ ] `pytest tests/python/test_edge_scenarios.py` passes, covering §6.3 (scenario 4 pending §9.1)
-- [ ] `python scripts/traffic_simulator.py --concurrency 10 --requests 30` completes against a live server
-- [ ] `--disconnect-rate 0.1` leaves block counts back at baseline
-- [ ] `docs/TEAM_ONBOARDING.md` followed start to finish by someone else, with no improvisation needed
-- [ ] `docs/API_TESTING_GUIDE.md` — every example executed before commit
+- [x] `pytest tests/python/test_edge_scenarios.py` passes — 30 tests; §9.1 landed
+      first, so scenario 4 asserts the 400 rather than the old 200
+- [x] `python scripts/traffic_simulator.py --concurrency 10 --requests 30` completes
+      against a live server — `{'429': 6, '200': 24}`, zero errors
+- [x] `--disconnect-rate` leaves block counts back at baseline — verified at 0.25
+      with 18 mid-stream hangups, 0 leaked blocks. It also found the abort/step
+      data race that 32 of 96 requests were hitting
+- [ ] `docs/TEAM_ONBOARDING.md` followed start to finish **by someone else** —
+      still open, and not something its author can certify. Every command in it
+      was executed, but a second pair of eyes is the point of this item
+- [x] `docs/API_TESTING_GUIDE.md` — every example executed against a live server
+      before commit, which found two wrong examples in the draft
 
 **Shared**
 
-- [ ] All **116** existing Python tests still green
-- [ ] `frontend && npm run build` green
-- [ ] Each person on their own branch, one PR, one approval
-- [ ] No shared config (`requirements.txt`, `package.json`) edited without asking
+- [x] The pre-existing suite stayed green throughout — 116 then, **237** now
+- [x] `frontend && npm run build` green
+- [ ] Each person on their own branch, one PR, one approval — **not done, by
+      instruction**: this was all implemented directly on `main` at the user's
+      request. Recorded because the plan's zero-conflict model assumes otherwise
+- [x] No shared config edited — `requirements.txt` and `package.json` are both
+      untouched; everything needed was already installed
 
 ---
 

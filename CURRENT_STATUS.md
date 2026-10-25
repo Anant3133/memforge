@@ -182,8 +182,13 @@ bridge, and the API. All 7 pipeline stages pass via `python scripts/run_pipeline
 - [ ] Chunked prefill (Phase C)
 - [ ] Speculative decoding inside continuous batching (Phase D)
 - [ ] GPU execution path exercised (Phase E)
-- [~] Production hardening (Phase F) — disconnect propagation, backpressure and
-      `/metrics` done; sustained load testing and structured logging outstanding
+- [x] Production hardening (Phase F) — **done 2026-10-26**: HTTP disconnect
+      propagated into a scheduler abort, `max_concurrency` enforced with 429 +
+      `Retry-After`, a `/metrics` endpoint, sustained load verified at 110
+      requests with **0 leaked blocks**, and structured text/JSON logging.
+      `EngineCore` resolved by deletion. Only AddressSanitizer profiling on the
+      C++ side remains, tracked in
+      [PROGRESS_AND_NEXT_PHASES.md](PROGRESS_AND_NEXT_PHASES.md) §8
 
 Next phases are specified with definitions of done in
 [PROGRESS_AND_NEXT_PHASES.md](PROGRESS_AND_NEXT_PHASES.md#8-next-phases).

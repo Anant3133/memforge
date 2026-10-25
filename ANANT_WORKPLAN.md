@@ -17,7 +17,7 @@ baseline the plan assumes actually real?* and *has any sprint work landed?*
 
 | Claim in the plan / status docs | Verification run today | Result |
 | :--- | :--- | :--- |
-| 78 Python tests passing | `python -m pytest tests/python/ -q` | **78 passed** in 40.4 s |
+| 78 Python tests passing | `python -m pytest tests/python/ -q` | **78 passed** in 40.4 s *(this row records the 2026-10-24 baseline; the suite is now 237)* |
 | Native extension built and importable | `memforge_c.cp312-win_amd64.pyd` present, imported by the suite | **Present** |
 | C++ core: allocator, scheduler, sequence | `engine/src/` — 4 sources, 5 headers | **Present** |
 | `PhysicalBlock::ref_count` infrastructure exists and is unused | [block_allocator.cpp:33](engine/src/block_allocator.cpp#L33) sets `ref_count = 1`, nothing ever increments it | **Confirmed — exactly as documented** |
@@ -809,14 +809,16 @@ items that depend on Track 1's stress harness.
 - [x] `/metrics` endpoint live, including `memforge_blocks_leaked`
 - [x] `EngineCore` resolved — deleted, with the rationale recorded
 - [x] No block leaks: `free + allocated == total` verified across the benchmark and suite
-- [ ] Sustained multi-client load test — **blocked on Track 1's
-      `run_stress_test.py`**; `/metrics` is its scrape target and is ready
-- [ ] Structured logging
+- [x] Sustained multi-client load test — `benchmarks/run_stress_test.py`
+      shipped and run: 110 requests at concurrency 8, **0 leaked blocks**,
+      all blocks returned to the pool
+- [x] Structured logging — `server/logging_config.py`, text and JSON, with
+      the twelve `print()` calls replaced
 
 **Always**
 
 - [x] All 78 pre-existing tests green, unchanged
-- [x] 116 Python tests total, 3/3 C++ suites
+- [x] Python suite green and growing — 116 at the time of writing, **237** now; 3/3 C++ suites
 - [x] Docs updated with measured numbers, including the one that fell short of target
 
 **Not done from the original plan**

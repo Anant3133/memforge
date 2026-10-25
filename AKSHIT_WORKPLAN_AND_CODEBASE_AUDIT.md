@@ -536,12 +536,12 @@ silent fallback would otherwise look exactly like success.
 
 **Non-negotiable, for every tier:**
 
-- [ ] Output **byte-identical** to the current engine. Every optimisation here
+- [x] Output **byte-identical** to the current engine. Every optimisation here
       changes how KV is read; a wrong read produces fluent, confident, wrong
       text rather than a crash, so the bar is exact token equality, as it is for
       prefix sharing
-- [ ] All existing tests green (**157** Python, 3/3 C++)
-- [ ] `python scripts/run_pipeline.py` 7/7
+- [x] All existing tests green — **237** Python, 3/3 C++
+- [x] `python scripts/run_pipeline.py` 7/7
 
 **Phase A target:** paged throughput within **5%** of contiguous at 2048 tokens,
 reported by `run_context_sweep.py`.
@@ -713,7 +713,7 @@ built on top of code that is about to be deleted.
 
 | Step | Work | Gate |
 | --: | :--- | :--- |
-| 1 | B.1 dead code, B.2 hardcoded values, B.3 imports | 157 tests + 7/7 pipeline |
+| 1 | B.1 dead code, B.2 hardcoded values, B.3 imports | tests + 7/7 pipeline green |
 | 2 | A.4 item 1 — `run_context_sweep.py` | Baseline recorded at all four context lengths |
 | 3 | A.4 item 2 — `kernels/paged_gather.py` (tier 1a) | Byte-identical; sweep shows the delta |
 | 4 | A.4 item 3 — `kernels/batched_decode.py` (tier 1b) | Byte-identical; the 640 MB/step copy gone |

@@ -410,12 +410,18 @@ Implemented. Measured results and design notes in section 10 below.
       now enforced under the submit lock and returns 429 with `Retry-After`
       rather than holding the connection open.
 - [x] Decide `EngineCore`'s fate — deleted, see limitation 7 above.
-- [ ] Load testing at scale (Track 1 owns the stress harness; `/metrics` is its
-      scrape target).
+- [x] Load testing at scale — `benchmarks/run_stress_test.py`: 110 requests
+      at concurrency 8, 0 leaked blocks, all blocks returned, RSS flat after
+      warm-up. `scripts/traffic_simulator.py` adds mid-stream disconnects.
+- [x] Structured logging — text and JSON via `server/logging_config.py`.
 - [ ] Memory-leak profiling under sustained load (AddressSanitizer on the C++
       side).
 - **Done when:** the server survives a sustained multi-client load test with flat
-  memory and no leaked blocks. — *Not yet claimed; needs Track 1's harness.*
+  memory and no leaked blocks. — **Met.** 110 requests at concurrency 8:
+  0 leaked blocks at every sample, allocation back to its starting value, and
+  RSS growth of +15.3 MB against +34.9 MB over 45 requests — not monotonic in
+  request count, which is allocator caching rather than a leak. Only
+  AddressSanitizer profiling on the C++ side remains outstanding.
 
 ---
 

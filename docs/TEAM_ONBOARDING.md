@@ -133,7 +133,10 @@ cd ..
 pytest tests/python/ -q
 ```
 
-**Expect 157 passing in about 9 seconds.** These use a tiny randomly-initialised
+**Expect 237 passing.** Runtime varies a lot with machine load — around
+15 s on an idle machine, over two minutes on a busy one — because many of
+them run real forward passes through a tiny model. The count is what
+matters, not the clock. These use a tiny randomly-initialised
 model, so they need no weights and no network. If they pass, your Python and C++
 layers are both working.
 
@@ -257,7 +260,7 @@ one-line fix — that is how two branches end up editing the same line.
 
 ```bash
 pytest tests/python/ -q               # must stay green
-python scripts/cpp_test_runner.py     # if you touched C++
+python scripts/cpp_test_runner.py     # if you touched C++ (3 suites)
 cd frontend && npm run build          # if you touched the frontend
 ```
 
@@ -295,7 +298,7 @@ memforge_ml/         PyTorch execution layer
   speculative/       draft proposal and rejection sampling
 server/              FastAPI app
   api/               routes, websocket, disconnect handling
-tests/python/        157 tests
+tests/python/        237 tests
 tests/cpp/           three C++ suites
 benchmarks/          benchmarks; results land in benchmarks/results/
 scripts/             CLI, env doctor, traffic simulator, report exporter, pipeline
@@ -478,7 +481,7 @@ fix for whatever is wrong.
 
 Once you are set up, confirm you can actually work:
 
-1. `pytest tests/python/ -q` — 157 passing
+1. `pytest tests/python/ -q` — 237 passing
 2. `python scripts/check_env.py` — 12 OK, exit 0
 3. Start the server, then `python scripts/memforge_cli.py` and ask it something
 4. `curl http://127.0.0.1:8000/metrics` — the Prometheus gauges
