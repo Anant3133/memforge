@@ -8,6 +8,7 @@ not collide on a shared branch.
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 
 import pytest
@@ -18,7 +19,7 @@ from memforge_ml.runtime.continuous_engine import HAS_CPP_ENGINE, ContinuousBatc
 from memforge_ml.runtime.sampling import SamplingParams
 from server.api.disconnect_handler import ClientDisconnected, run_cancellable
 from server.app import app
-from server.engine_manager import ENGINE_MANAGER, EngineSaturated
+from server.engine_manager import ENGINE_MANAGER, EngineManager, EngineSaturated
 
 
 @pytest.fixture
@@ -525,3 +526,125 @@ def test_live_metrics_includes_sharing_keys(stub_engine):
     for key in ("shared_blocks", "memory_saved_mb", "prefix_hit_rate",
                 "in_flight", "max_concurrency"):
         assert key in metrics, key
+
+
+# ------------------------------------- speculative stream concurrency safety
+
+def test_speculative_worker_holds_a_thread_lock_for_its_whole_run():
+    """
+    The bug: abandoning the async generator released `_spec_lock` while the
+    worker thread was still driving `PagedSpeculativeEngine`, which owns a
+    single KV pool and a single cache. A second request then started a second
+    worker against the same state.
+
+    Reproduced directly against the real `speculative_stream`, with a stub
+    engine whose `stream()` reports how many workers are inside it at once.
+    """
+    import threading
+
+    concurrent = {"now": 0, "peak": 0}
+    gate = threading.Lock()
+    started = threading.Event()
+    release = threading.Event()
+
+    class _SlowSpecEngine:
+        def stream(self, prompt, params):
+            with gate:
+                concurrent["now"] += 1
+                concurrent["peak"] = max(concurrent["peak"], concurrent["now"])
+            started.set()
+            try:
+                for i in range(100):
+                    # Block until the test lets go, standing in for a long
+                    # generation the client abandons part-way through.
+                    release.wait(timeout=0.02)
+                    yield type("E", (), {
+                        "index": i, "text": "x", "token_id": 1,
+                        "source": "draft", "round_index": 0,
+                    })()
+                return {}
+            finally:
+                with gate:
+                    concurrent["now"] -= 1
+
+    async def scenario():
+        manager = EngineManager()
+        manager.ready = True
+        manager.spec_engine = _SlowSpecEngine()
+
+        # First consumer takes one token then abandons the stream, exactly as a
+        # disconnecting client does.
+        first = manager.speculative_stream("p", SamplingParams(max_new_tokens=50))
+        async for _ in first:
+            break
+        await first.aclose()
+
+        assert started.is_set(), "the first worker never started"
+
+        # Second request, immediately. If the lock were released early this
+        # would run against the same engine as the still-live first worker.
+        second = manager.speculative_stream("p", SamplingParams(max_new_tokens=50))
+        async for _ in second:
+            break
+        await second.aclose()
+
+        release.set()
+        await asyncio.sleep(0.3)
+        return concurrent["peak"]
+
+    peak = asyncio.run(scenario())
+    assert peak == 1, (
+        f"{peak} workers were inside the speculative engine at once; the thread "
+        "lock is not holding for the worker's full lifetime"
+    )
+
+
+def test_abandoned_speculative_stream_is_cancelled_early():
+    """
+    Cancellation must stop the worker, not merely let it finish.
+
+    `stream()` frees the sequence's physical blocks in its own `finally`, so a
+    worker that runs to completion does eventually clean up -- which is why
+    asserting "the finally ran" proves nothing. What matters is that an
+    abandoned request stops *promptly* instead of generating hundreds more
+    tokens nobody will read, holding its blocks and the engine the whole time.
+
+    So this counts what the generator actually produced: a few tokens with the
+    cancel flag working, essentially all of them without it.
+    """
+    produced = {"count": 0}
+    closed = threading.Event()
+    TOTAL = 400
+
+    class _CountingSpecEngine:
+        def stream(self, prompt, params):
+            try:
+                for i in range(TOTAL):
+                    produced["count"] += 1
+                    yield type("E", (), {
+                        "index": i, "text": "x", "token_id": 1,
+                        "source": "target", "round_index": 0,
+                    })()
+                return {}
+            finally:
+                closed.set()
+
+    async def scenario():
+        manager = EngineManager()
+        manager.ready = True
+        manager.spec_engine = _CountingSpecEngine()
+        stream = manager.speculative_stream("p", SamplingParams(max_new_tokens=TOTAL))
+        async for _ in stream:
+            break
+        await stream.aclose()
+        for _ in range(200):
+            if closed.is_set():
+                break
+            await asyncio.sleep(0.01)
+
+    asyncio.run(scenario())
+    assert closed.is_set(), "stream()'s finally never ran, so blocks would leak"
+    assert produced["count"] < TOTAL // 4, (
+        f"the worker produced {produced['count']} of {TOTAL} tokens after the "
+        "client left; cancellation is not reaching the generator"
+    )

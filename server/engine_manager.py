@@ -15,6 +15,7 @@ callers both consume the same stream.
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -26,6 +27,8 @@ from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine
 from memforge_ml.runtime.sampling import SamplingParams
 from memforge_ml.runtime.speculative_runtime import PagedSpeculativeEngine
 from server.config import SERVER_CONFIG, ServerConfig
+
+LOGGER = logging.getLogger(__name__)
 
 DONE = object()  # sentinel pushed onto a request queue when its stream ends
 
@@ -74,6 +77,13 @@ class EngineManager:
         self._wake = asyncio.Event()
         self._submit_lock = asyncio.Lock()
         self._spec_lock = asyncio.Lock()
+        # A real thread lock, held by the speculative worker for its entire run.
+        # The asyncio lock above only serialises *entering* the generator, and
+        # an abandoned async generator releases it while the worker thread is
+        # still driving the engine -- see speculative_stream() for why that
+        # matters. Deliberately not rebuilt when the event loop changes: it
+        # guards a thread, not a loop.
+        self._spec_engine_lock = threading.Lock()
         # Admission control. `max_concurrency` has been in ServerConfig since the
         # server was written and was read by nothing -- a limit that looked
         # enforced but was not. Counted rather than a Semaphore so saturation can
@@ -86,7 +96,7 @@ class EngineManager:
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         cfg = self.config
-        print(f"[EngineManager] loading target model: {cfg.target_model}")
+        LOGGER.info("loading target model", extra={"model": cfg.target_model})
         self.tokenizer = AutoTokenizer.from_pretrained(cfg.target_model)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -111,11 +121,21 @@ class EngineManager:
             view_cache_budget_mb=cfg.view_cache_budget_mb,
             block_attention=cfg.block_attention,
         )
-        print(f"[EngineManager] continuous engine ready: {self.engine.pool.describe()}")
+        pool = self.engine.pool.describe()
+        LOGGER.info(
+            "continuous engine ready",
+            extra={
+                "kv_pool_mb": pool["total_mb"],
+                "num_blocks": pool["num_blocks"],
+                "block_size": pool["block_size"],
+                "capacity_tokens": pool["capacity_tokens"],
+                "device": pool["device"],
+            },
+        )
 
         if cfg.load_draft_model:
             try:
-                print(f"[EngineManager] loading draft model: {cfg.draft_model}")
+                LOGGER.info("loading draft model", extra={"model": cfg.draft_model})
                 self.draft_model = AutoModelForCausalLM.from_pretrained(
                     cfg.draft_model, dtype=dtype
                 ).to(device)
@@ -130,9 +150,12 @@ class EngineManager:
                     kv_budget_mb=cfg.kv_budget_mb / 2,
                     max_model_len=cfg.max_model_len,
                 )
-                print("[EngineManager] speculative engine ready")
+                LOGGER.info("speculative engine ready")
             except Exception as exc:  # draft model is optional
-                print(f"[EngineManager] draft model unavailable, speculation disabled: {exc}")
+                LOGGER.warning(
+                    "draft model unavailable, speculation disabled",
+                    extra={"error": f"{type(exc).__name__}: {exc}"},
+                )
                 self.draft_model = None
                 self.spec_engine = None
 
@@ -153,7 +176,7 @@ class EngineManager:
             self.loaded_at = time.time()
         except Exception as exc:
             self.load_error = f"{type(exc).__name__}: {exc}"
-            print(f"[EngineManager] model load FAILED: {self.load_error}")
+            LOGGER.error("model load failed", extra={"error": self.load_error})
             return False
         return True
 
@@ -189,7 +212,12 @@ class EngineManager:
             try:
                 report = await loop.run_in_executor(None, self.engine.step)
             except Exception as exc:  # never let one bad step kill the server
-                print(f"[EngineManager] step failed: {type(exc).__name__}: {exc}")
+                LOGGER.error(
+                    "engine step failed",
+                    extra={"error": f"{type(exc).__name__}: {exc}",
+                           "tracked_requests": len(self._tracked)},
+                    exc_info=True,
+                )
                 for seq_id in list(self._tracked):
                     self._emit(seq_id, {"type": "error", "message": str(exc)})
                     self._close(seq_id)
@@ -359,45 +387,71 @@ class EngineManager:
         self._ensure_loop()
         loop = asyncio.get_running_loop()
         queue: "asyncio.Queue[Any]" = asyncio.Queue()
+        cancelled = threading.Event()
 
         def worker() -> None:
-            try:
-                generator = self.spec_engine.stream(prompt, params)
-                while True:
-                    try:
-                        event = next(generator)
-                    except StopIteration as stop:
+            # Held for the whole run, not just while the consumer is listening.
+            # `PagedSpeculativeEngine` owns a single KV pool and a single cache,
+            # so two workers driving it at once corrupt each other's state.
+            with self._spec_engine_lock:
+                generator = None
+                try:
+                    generator = self.spec_engine.stream(prompt, params)
+                    while True:
+                        if cancelled.is_set():
+                            break
+                        try:
+                            event = next(generator)
+                        except StopIteration as stop:
+                            loop.call_soon_threadsafe(
+                                queue.put_nowait, {"type": "done", **(stop.value or {})}
+                            )
+                            break
                         loop.call_soon_threadsafe(
-                            queue.put_nowait, {"type": "done", **(stop.value or {})}
+                            queue.put_nowait,
+                            {
+                                "type": "token",
+                                "index": event.index,
+                                "token": event.text,
+                                "token_id": event.token_id,
+                                "source": event.source,
+                                "is_draft": event.source == "draft",
+                                "round": event.round_index,
+                            },
                         )
-                        break
+                except Exception as exc:
                     loop.call_soon_threadsafe(
                         queue.put_nowait,
-                        {
-                            "type": "token",
-                            "index": event.index,
-                            "token": event.text,
-                            "token_id": event.token_id,
-                            "source": event.source,
-                            "is_draft": event.source == "draft",
-                            "round": event.round_index,
-                        },
+                        {"type": "error", "message": f"{type(exc).__name__}: {exc}"},
                     )
-            except Exception as exc:
-                loop.call_soon_threadsafe(
-                    queue.put_nowait, {"type": "error", "message": f"{type(exc).__name__}: {exc}"}
-                )
-            finally:
-                loop.call_soon_threadsafe(queue.put_nowait, DONE)
+                finally:
+                    # close() raises GeneratorExit inside stream(), whose own
+                    # `finally` frees the sequence's physical blocks. Without
+                    # this an abandoned speculative stream leaks its blocks for
+                    # the life of the process.
+                    if generator is not None:
+                        try:
+                            generator.close()
+                        except Exception:
+                            pass
+                    loop.call_soon_threadsafe(queue.put_nowait, DONE)
 
         async with self._spec_lock:
             thread = threading.Thread(target=worker, daemon=True)
             thread.start()
-            while True:
-                item = await queue.get()
-                if item is DONE:
-                    break
-                yield item
+            try:
+                while True:
+                    item = await queue.get()
+                    if item is DONE:
+                        break
+                    yield item
+            finally:
+                # Reached on a client disconnect, which closes this generator.
+                # Only a flag is set: awaiting a thread join here is illegal
+                # during GeneratorExit, and the worker holds
+                # _spec_engine_lock until it actually stops, so the next
+                # request waits for the engine rather than racing it.
+                cancelled.set()
 
     # ---------------------------------------------------------------- telemetry
 

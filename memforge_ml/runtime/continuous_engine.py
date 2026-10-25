@@ -18,6 +18,7 @@ forward pass, and scattered back into their own blocks.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from collections import deque
@@ -34,6 +35,8 @@ from memforge_ml.runtime.kv_pool import ModelKVSpec, PagedKVPool
 from memforge_ml.runtime.paged_cache import PagedCache
 from memforge_ml.runtime.prefix_sharing import block_owners, copy_block, sharing_telemetry
 from memforge_ml.runtime.sampling import SamplingParams, sample_logits
+
+LOGGER = logging.getLogger(__name__)
 
 try:
     import memforge_c
@@ -180,9 +183,9 @@ class ContinuousBatchingEngine:
         # rather than silently doing nothing.
         self.block_attention = bool(block_attention) and attention_backend.enable_on(model)
         if block_attention and not self.block_attention:
-            print(
-                "[ContinuousBatchingEngine] block attention unavailable on this "
-                "transformers version; falling back to the materialised read path"
+            LOGGER.warning(
+                "block attention unavailable on this transformers version; "
+                "falling back to the materialised read path"
             )
         self.total_blockwise_layers = 0
         self.total_blockwise_fallbacks = 0

@@ -10,19 +10,40 @@ from server.api.routes import router as rest_router
 from server.api.websocket import router as ws_router
 from server.config import SERVER_CONFIG
 from server.engine_manager import ENGINE_MANAGER
+from server.logging_config import configure_logging
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("[MemForge Server] starting up...")
+    # The application owns logging configuration; library code only ever
+    # asks for a logger.
+    logger = configure_logging()
+    # `configured_*` rather than `host`/`port`: these come from ServerConfig and
+    # are what `python -m server.app` would bind, but uvicorn's own --host and
+    # --port override them without this process ever learning the real values.
+    # Reporting them as the bound address would be wrong whenever the CLI is used.
+    logger.info(
+        "server starting",
+        extra={
+            "configured_host": SERVER_CONFIG.host,
+            "configured_port": SERVER_CONFIG.port,
+            "target_model": SERVER_CONFIG.target_model,
+            "kv_budget_mb": SERVER_CONFIG.kv_budget_mb,
+            "max_num_seqs": SERVER_CONFIG.max_num_seqs,
+            "max_concurrency": SERVER_CONFIG.max_concurrency,
+        },
+    )
     await ENGINE_MANAGER.start()
     app.state.engine_manager = ENGINE_MANAGER
     if ENGINE_MANAGER.ready:
-        print("[MemForge Server] engine ready; accepting requests")
+        logger.info("engine ready, accepting requests")
     else:
-        print(f"[MemForge Server] engine not ready: {ENGINE_MANAGER.load_error}")
+        logger.error(
+            "engine not ready",
+            extra={"load_error": ENGINE_MANAGER.load_error},
+        )
     yield
-    print("[MemForge Server] shutting down...")
+    logger.info("server shutting down")
     await ENGINE_MANAGER.stop()
 
 
