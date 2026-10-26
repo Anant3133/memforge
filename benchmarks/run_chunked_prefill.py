@@ -93,6 +93,7 @@ def run_scenario(
     warmup_steps: int,
     block_size: int,
     kv_budget_mb: float,
+    fused: bool = False,
 ) -> Dict[str, Any]:
     """
     One run: a victim decoding steadily, then a long prompt lands on it.
@@ -110,6 +111,7 @@ def run_scenario(
         max_model_len=len(long_prompt) + victim_tokens + 64,
         enable_prefix_sharing=False,  # isolate the scheduling effect
         max_prefill_tokens_per_step=budget,
+        fused_prefill=fused,
     )
     params = SamplingParams(
         max_new_tokens=victim_tokens, temperature=0.0, stop_on_eos=False
@@ -174,6 +176,11 @@ def run_scenario(
             else None
         ),
         "prefill_chunks": engine.telemetry()["prefill_chunks"],
+        # Forward passes are the figure the second Phase C bullet moves: a
+        # mixed step costs two without fusion and one with it, which is why
+        # chunking alone cannot take the stall ratio below about 2.5x.
+        "forward_passes": engine.total_forward_passes,
+        "fused_steps": engine.telemetry()["fused_steps"],
     }
 
 
@@ -189,6 +196,11 @@ def main() -> int:
                         help="victim tokens before the long prompt arrives")
     parser.add_argument("--budgets", type=int, nargs="+", default=[0, 512, 256, 128],
                         help="prefill token budgets per step; 0 means unlimited")
+    parser.add_argument(
+        "--fused", action="store_true",
+        help="also run each budget with prefill/decode fusion on (Phase C "
+             "bullet 2), to separate it from chunking alone",
+    )
     parser.add_argument("--block-size", type=int, default=16)
     parser.add_argument("--kv-budget-mb", type=float, default=1024.0)
     args = parser.parse_args()
@@ -208,36 +220,69 @@ def main() -> int:
     victim_prompt = build_prompt(tokenizer, args.victim_prompt_tokens)
 
     rows: List[Dict[str, Any]] = []
+    # Each budget is run twice when fusion is requested: without it (two
+    # forward passes per mixed step) and with it (one). The pair is what
+    # isolates the second Phase C bullet from the first.
+    arms = [False, True] if args.fused else [False]
     for budget in args.budgets:
-        label = "unlimited" if budget == 0 else str(budget)
-        banner(f"prefill budget: {label} tokens/step")
-        row = run_scenario(
-            model, tokenizer, budget, victim_prompt, long_prompt,
-            args.victim_tokens, args.warmup_tokens, args.block_size, args.kv_budget_mb,
-        )
-        rows.append(row)
-        print(f"  victim tokens          : {row['victim_tokens']}")
-        print(f"  median gap before      : {row['median_before_ms']} ms")
-        print(f"  median gap after       : {row['median_after_ms']} ms")
-        print(f"  p99 gap                : {row['p99_ms']} ms  "
-              f"({row['p99_ratio']}x the victim's own median)")
-        print(f"  worst gap              : {row['max_ms']} ms  "
-              f"({row['stall_ratio']}x)")
-        print(f"  prefill chunks         : {row['prefill_chunks']}")
-        print(f"  intruder TTFT          : {row['intruder_ttft_ms']} ms")
+        for fused in arms:
+            if fused and budget == 0:
+                # Nothing to fuse: with an unlimited budget a prompt is
+                # prefilled in one step and never shares a step with a decode.
+                continue
+            label = "unlimited" if budget == 0 else str(budget)
+            banner(f"prefill budget: {label} tokens/step"
+                   f"{' + fused' if fused else ''}")
+            row = run_scenario(
+                model, tokenizer, budget, victim_prompt, long_prompt,
+                args.victim_tokens, args.warmup_tokens, args.block_size,
+                args.kv_budget_mb, fused=fused,
+            )
+            row["fused"] = fused
+            rows.append(row)
+            print(f"  victim tokens          : {row['victim_tokens']}")
+            print(f"  median gap before      : {row['median_before_ms']} ms")
+            print(f"  median gap after       : {row['median_after_ms']} ms")
+            print(f"  p99 gap                : {row['p99_ms']} ms  "
+                  f"({row['p99_ratio']}x the victim's own median)")
+            print(f"  worst gap              : {row['max_ms']} ms  "
+                  f"({row['stall_ratio']}x)")
+            print(f"  prefill chunks         : {row['prefill_chunks']}")
+            print(f"  fused steps            : {row['fused_steps']}")
+            print(f"  forward passes         : {row['forward_passes']}")
+            print(f"  intruder TTFT          : {row['intruder_ttft_ms']} ms")
 
     banner("Summary")
-    print(f"{'budget':>10}{'median before':>15}{'p99':>10}{'p99 x':>8}"
-          f"{'worst':>10}{'worst x':>10}{'chunks':>8}")
+    print(f"{'budget':>10}{'fused':>7}{'median before':>15}{'p99':>10}{'p99 x':>8}"
+          f"{'worst':>10}{'worst x':>10}{'chunks':>8}{'passes':>8}")
     for row in rows:
         label = "unlimited" if row["budget"] == 0 else str(row["budget"])
-        print(f"{label:>10}{row['median_before_ms']:>15.2f}{row['p99_ms']:>10.2f}"
+        print(f"{label:>10}{('yes' if row.get('fused') else 'no'):>7}"
+              f"{row['median_before_ms']:>15.2f}{row['p99_ms']:>10.2f}"
               f"{row['p99_ratio']:>8.2f}{row['max_ms']:>10.2f}"
-              f"{row['stall_ratio']:>10.2f}{row['prefill_chunks']:>8}")
+              f"{row['stall_ratio']:>10.2f}{row['prefill_chunks']:>8}"
+              f"{row['forward_passes']:>8}")
 
     baseline = next((r for r in rows if r["budget"] == 0), None)
     best = min((r for r in rows if r["budget"] > 0),
                key=lambda r: r["stall_ratio"], default=None)
+
+    # The fusion comparison is a like-for-like pair at the same budget, so the
+    # only difference is one forward pass per mixed step.
+    for row in rows:
+        if not row.get("fused"):
+            continue
+        twin = next(
+            (r for r in rows
+             if r["budget"] == row["budget"] and not r.get("fused")),
+            None,
+        )
+        if twin is None:
+            continue
+        print(f"\nBudget {row['budget']}: fusing the {row['fused_steps']} mixed "
+              f"steps took forward passes from {twin['forward_passes']} to "
+              f"{row['forward_passes']}, and the worst stall from "
+              f"{twin['stall_ratio']:.2f}x to {row['stall_ratio']:.2f}x.")
     verdict = None
     if baseline and best:
         improvement = baseline["max_ms"] / best["max_ms"] if best["max_ms"] else 0.0
@@ -266,13 +311,26 @@ def main() -> int:
         if met:
             verdict += " Target met: in-flight decoding is effectively unaffected."
         elif floor_reached:
+            fused_rows = [r for r in rows if r.get("fused")]
             verdict += (
-                " Target NOT met, and the residual is understood: the ratio "
-                "asymptotes near 2x because a step carrying a chunk runs two "
-                "forward passes (chunk, then decode batch). Removing that "
-                "requires Phase C bullet 2, prefill/decode fusion into a single "
-                "pass, which is not implemented."
+                " Target NOT met, and the residual is understood. Without "
+                "fusion the ratio asymptotes near 2.5x because a step carrying "
+                "a chunk runs TWO forward passes, one for the chunk and one "
+                "for the decode batch."
             )
+            if fused_rows:
+                verdict += (
+                    " With fusion (bullet 2) that second pass is gone and the "
+                    "floor drops to about 2x; what remains is no longer the "
+                    "extra pass but the chunk's own token count, since the "
+                    "fused pass still carries the chunk's tokens alongside the "
+                    "decode's one."
+                )
+            else:
+                verdict += (
+                    " Re-run with --fused to measure bullet 2, which removes "
+                    "that second pass."
+                )
         else:
             verdict += " Target NOT met; try smaller budgets to find the floor."
         print(verdict)

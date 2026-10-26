@@ -85,6 +85,16 @@ class ServerConfig(BaseModel):
     # MEMFORGE_LOAD_DRAFT.
     batched_speculation: bool = _env_bool("MEMFORGE_BATCHED_SPECULATION", False)
 
+    # Phase C bullet 2: run a prefill chunk and the step's decode tokens in
+    # ONE packed forward pass instead of two. Only does anything alongside
+    # MEMFORGE_MAX_PREFILL_TOKENS_PER_STEP, since without chunking a step
+    # never carries both. Lossless, but it routes attention through the
+    # varlen reference kernel for the fused pass, which is a Python block
+    # loop and slower per token on CPU than the materialised path -- so the
+    # win is one fewer pass through the model, not a faster pass. Off by
+    # default. Mutually exclusive with MEMFORGE_DECODE_VIEW_CACHE.
+    fused_prefill: bool = _env_bool("MEMFORGE_FUSED_PREFILL", False)
+
     # Toggles. Loading the draft model costs extra memory, so it is opt-out.
     load_draft_model: bool = _env_bool("MEMFORGE_LOAD_DRAFT", True)
     eager_load: bool = _env_bool("MEMFORGE_EAGER_LOAD", True)

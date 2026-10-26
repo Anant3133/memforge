@@ -235,6 +235,13 @@ MEMFORGE_BLOCK_ATTENTION=true \
 MEMFORGE_MAX_PREFILL_TOKENS_PER_STEP=256 \
   uvicorn server.app:app --port 8000
 
+# FAIREST LATENCY, FUSED (Phase C bullet 2) — the prefill chunk and the step's
+# decode tokens go through ONE forward pass instead of two. Takes the worst
+# stall from ~2.9x to ~1.8x at a small budget. Lossless. Needs chunking to be
+# on, since without it a step never carries both kinds of work. Not compatible
+# with MEMFORGE_DECODE_VIEW_CACHE.
+MEMFORGE_MAX_PREFILL_TOKENS_PER_STEP=64 MEMFORGE_FUSED_PREFILL=true   uvicorn server.app:app --port 8000
+
 # SPECULATION INSIDE THE BATCH (Phase D) — one target pass verifies every
 # sequence's K+1 candidates at once. Lossless, and OFF by default because it is
 # measured 0.62x–0.77x (slower) on this CPU: the draft's K serial passes cost

@@ -44,6 +44,10 @@ from typing import Any, Optional, Tuple
 import torch
 
 from memforge_ml.kernels.block_attention import paged_attention_blockwise
+from memforge_ml.kernels.varlen_attention import (
+    paged_attention_varlen,
+    paged_attention_varlen_materialised,
+)
 
 #: Name this backend registers under, and the value to assign to
 #: `model.config._attn_implementation`.
@@ -83,8 +87,47 @@ class _Binding:
         return self.cache.position
 
 
+class _VarlenBinding:
+    """
+    Addressing for a fused prefill+decode pass over a packed run of tokens.
+
+    Where `_Binding` serves one sequence and reads its length from the cache,
+    this serves many and carries per-token metadata instead: which sequence each
+    packed token belongs to, and its absolute position there. Those two arrays
+    are what supply causality, so nothing needs to be read back from a cache --
+    there is no single cursor to read.
+
+    `strict` is not configurable. A packed pass must never silently fall back to
+    eager attention: transformers builds a causal mask sized for one sequence of
+    `T_total` tokens, which for a packed run would let one sequence attend to
+    another's keys. That produces fluent, confident, wrong output, so the
+    fallback path raises here instead.
+    """
+
+    __slots__ = (
+        "pool", "block_tables", "seq_ids", "positions", "used", "block_wise",
+    )
+
+    def __init__(self, pool, block_tables, seq_ids, positions, block_wise=False):
+        self.pool = pool
+        self.block_tables = list(block_tables)
+        self.seq_ids = list(seq_ids)
+        self.positions = list(positions)
+        #: False selects the materialised path, which is the default because
+        #: it measured far faster on CPU -- the block-wise loop made a fused
+        #: step so much slower per pass that saving a third of the passes
+        #: still left latency worse. True selects the bounded-memory,
+        #: GPU-shaped loop; the two are proved equal.
+        self.block_wise = bool(block_wise)
+        self.used = 0
+
+
 def _current() -> Optional[_Binding]:
     return getattr(_state, "binding", None)
+
+
+def _current_varlen() -> Optional["_VarlenBinding"]:
+    return getattr(_state, "varlen", None)
 
 
 @contextmanager
@@ -106,6 +149,30 @@ def paged_attention_context(pool, cache):
         yield binding
     finally:
         _state.binding = previous
+
+
+@contextmanager
+def varlen_attention_context(
+    pool, block_tables, seq_ids, positions, block_wise=False
+):
+    """
+    Bind a packed multi-sequence pass for the enclosed forward.
+
+    Nests the same way `paged_attention_context` does, and is deliberately a
+    *separate* slot in the thread-local rather than a different kind of value in
+    the same one: a step that fuses prefill and decode must not be mistaken for
+    a single-sequence decode by any layer, and keeping them apart makes that a
+    type distinction rather than a runtime check.
+    """
+    previous = _current_varlen()
+    binding = _VarlenBinding(
+        pool, block_tables, seq_ids, positions, block_wise=block_wise
+    )
+    _state.varlen = binding
+    try:
+        yield binding
+    finally:
+        _state.varlen = previous
 
 
 def _mask_is_permissive(attention_mask: Optional[torch.Tensor]) -> bool:
@@ -143,6 +210,41 @@ def paged_attention_forward(
     fallback is not a failure mode: prefill and padded batches are expected to
     use it.
     """
+    varlen = _current_varlen()
+    if varlen is not None:
+        # A packed pass masks from per-token positions, so whatever mask
+        # transformers built is both unnecessary and wrong for this layout; it
+        # is ignored rather than consulted. No fallback: see _VarlenBinding.
+        if query.shape[0] != 1 or query.shape[2] != len(varlen.seq_ids):
+            raise ValueError(
+                f"varlen pass expected one packed row of "
+                f"{len(varlen.seq_ids)} tokens, got {tuple(query.shape)}"
+            )
+        varlen.used += 1
+        if varlen.block_wise:
+            out = paged_attention_varlen(
+                query,
+                varlen.pool.key_pool,
+                varlen.pool.value_pool,
+                module.layer_idx,
+                varlen.block_tables,
+                varlen.seq_ids,
+                varlen.positions,
+                varlen.pool.block_size,
+                scale=scaling,
+            )
+        else:
+            out = paged_attention_varlen_materialised(
+                query,
+                varlen.pool,
+                module.layer_idx,
+                varlen.block_tables,
+                varlen.seq_ids,
+                varlen.positions,
+                scale=scaling,
+            )
+        return _to_attention_output_layout(out), None
+
     binding = _current()
     single_query = query.shape[0] == 1 and query.shape[2] == 1
 
@@ -319,3 +421,45 @@ def enable_on(model) -> bool:
 
 def is_enabled_on(model) -> bool:
     return getattr(model.config, "_attn_implementation", None) == BACKEND_NAME
+
+
+def _attn_config_holders(model):
+    """Every config object an attention layer might read the implementation from."""
+    holders = [model.config]
+    for attr in ("text_config", "decoder"):
+        sub_config = getattr(model.config, attr, None)
+        if sub_config is not None and hasattr(sub_config, "_attn_implementation"):
+            holders.append(sub_config)
+    return holders
+
+
+@contextmanager
+def backend_enabled_on(model):
+    """
+    Route `model`'s attention through this backend for the enclosed block only.
+
+    `enable_on` is permanent, which is right for an engine that wants every
+    decode on the block-wise path. A fused pass is different: it needs the
+    varlen kernel for one forward and nothing else. Leaving the model rerouted
+    would send ordinary decodes through `paged_attention_forward` too, where
+    they find no binding and fall back to this module's eager implementation
+    rather than the attention the model was configured with -- a numerics
+    change for work that had no reason to change, visible to every other engine
+    sharing the model.
+
+    Yields False and changes nothing if the registry is unavailable, so a caller
+    can report the feature off instead of silently computing the wrong thing.
+    """
+    if not register():
+        yield False
+        return
+
+    holders = _attn_config_holders(model)
+    previous = [getattr(h, "_attn_implementation", None) for h in holders]
+    for holder in holders:
+        holder._attn_implementation = BACKEND_NAME
+    try:
+        yield True
+    finally:
+        for holder, original in zip(holders, previous):
+            holder._attn_implementation = original

@@ -42,6 +42,7 @@ from memforge_ml.runtime.kv_pool import ModelKVSpec, PagedKVPool
 from memforge_ml.runtime.paged_cache import PagedCache
 from memforge_ml.runtime.prefix_sharing import block_owners, copy_block, sharing_telemetry
 from memforge_ml.runtime.sampling import SamplingParams, sample_logits
+from memforge_ml.runtime.varlen_cache import VarlenPackedCache
 
 LOGGER = logging.getLogger(__name__)
 
@@ -143,6 +144,7 @@ class ContinuousBatchingEngine:
         max_prefill_tokens_per_step: int = 0,
         draft_model=None,
         lookahead_k: int = 0,
+        fused_prefill: bool = False,
     ):
         if not HAS_CPP_ENGINE:
             raise RuntimeError(
@@ -165,6 +167,16 @@ class ContinuousBatchingEngine:
                 "the mirror makes materialising the context cheap, block-wise "
                 "attention avoids materialising it at all"
             )
+        # Phase C bullet 2. A fused step writes K/V straight into the pool
+        # through a packed cache, so a sequence holding a decode mirror would
+        # be left with a stale one -- the mirror never sees the packed write.
+        if fused_prefill and decode_view_cache:
+            raise ValueError(
+                "fused_prefill and decode_view_cache are mutually exclusive: a "
+                "fused pass writes through a packed cache that the per-sequence "
+                "mirror never sees, so the mirror would go stale"
+            )
+        self.fused_prefill = bool(fused_prefill)
         self.decode_view_cache = decode_view_cache
         self.view_cache_budget_bytes = int(max(0.0, view_cache_budget_mb) * 1024 * 1024)
         self._view_cache_bytes_in_use = 0
@@ -224,6 +236,19 @@ class ContinuousBatchingEngine:
         self.total_blockwise_layers = 0
         self.total_blockwise_fallbacks = 0
 
+        # A fused pass is only possible if the model actually routes attention
+        # through this backend -- otherwise the varlen kernel is never called
+        # and the packed tokens are attended as though they were one sequence.
+        # Without the registry the feature cannot work at all, so it reports
+        # itself off rather than producing wrong output.
+        if self.fused_prefill and not attention_backend.register():
+            LOGGER.warning(
+                "fused prefill needs the attention registry, which this "
+                "transformers version does not expose; running prefill and "
+                "decode as separate passes"
+            )
+            self.fused_prefill = False
+
         self.eos_token_ids = self._resolve_eos_ids()
         self.runtimes: Dict[int, SequenceRuntime] = {}
         self._next_seq_id = 1
@@ -235,9 +260,18 @@ class ContinuousBatchingEngine:
         self.total_steps = 0
         self.total_forward_passes = 0
         self.total_preemptions = 0
-        self.total_cached_prefix_tokens = 0   # prefill tokens skipped via a hit
+        # Prefill tokens this engine did not have to recompute. Counts BOTH
+        # Phase B prefix-cache hits and Phase C chunk resumption, because the
+        # scheduler reports them through the same `num_cached_tokens` field
+        # and the engine cannot tell them apart. So this is a work-avoided
+        # figure, not a sharing figure -- `prefix_cache_hits` is the one that
+        # measures sharing. Conflating them once made a prefix-sharing test
+        # pass with registration deleted.
+        self.total_cached_prefix_tokens = 0
         self.total_cow_copies = 0
         self.total_prefill_chunks = 0
+        self.total_fused_steps = 0
+        self.total_fused_tokens = 0
         self.total_draft_tokens_proposed = 0
         self.total_draft_tokens_accepted = 0
         self.total_speculative_rounds = 0
@@ -461,6 +495,17 @@ class ContinuousBatchingEngine:
         decode_infos = [i for i in result.running_sequences if not i.is_prefill]
 
         events: List[TokenEvent] = []
+
+        # Phase C bullet 2: when a step carries both a prefill chunk and decode
+        # tokens, run them as one packed pass instead of two passes through the
+        # whole model. Two passes per step is precisely why the chunked-prefill
+        # stall ratio floors at ~2.5x rather than approaching 1x.
+        if self._can_fuse(prefill_infos, decode_infos):
+            fused = self._run_fused_step(prefill_infos, decode_infos)
+            if fused is not None:
+                events.extend(fused)
+                prefill_infos, decode_infos = [], []
+
         for info in prefill_infos:
             ev = self._run_prefill(info)
             if ev is not None:
@@ -591,6 +636,222 @@ class ContinuousBatchingEngine:
         self.total_prefill_chunks += 1
         token_id = sample_logits(out.logits[0, -1], rt.params, rt.generator)
         return self._accept_token(rt, token_id, source="target")
+
+    # ------------------------------------------------------------ fused step
+
+    def _can_fuse(self, prefill_infos, decode_infos) -> bool:
+        """
+        Whether this step is a candidate for one packed pass.
+
+        Both kinds of work have to be present -- fusing a step that has only
+        one kind would just be the ordinary path with extra bookkeeping -- and
+        speculation is excluded because its decode step is already a batched
+        multi-query pass of its own with a different shape.
+
+        The prefill/decode presence test here is an early exit, not a
+        correctness guard: `_run_fused_step` checks the same thing again after
+        preparation, because the prefill budget can leave a chunk empty and
+        turn a mixed step into a decode-only one. Removing this check changes
+        no output, only the wasted preparation work -- which mutation testing
+        confirms. It is kept because that preparation resets and rebinds every
+        participating cache, and doing it twice in a step is pure cost.
+        """
+        return (
+            self.fused_prefill
+            and not self.speculation_enabled
+            and bool(prefill_infos)
+            and bool(decode_infos)
+        )
+
+    def _prepare_fused_prefill(self, info, slot: int):
+        """
+        Set a prefilling sequence up for a packed pass.
+
+        Mirrors `_run_prefill`'s chunk arithmetic exactly -- the two must agree
+        on where a chunk starts and ends, or a fused step and an unfused step
+        would write different KV for the same prompt. Returns None when this
+        sequence contributes nothing this step.
+        """
+        rt = self.runtimes.get(info.seq_id)
+        if rt is None or rt.done:
+            return None
+
+        block_table = list(info.block_table)
+        if rt.cache is None:
+            rt.cache = PagedCache(
+                self.pool,
+                block_table,
+                device=self.device,
+                # No mirror and no lazy flag: a fused pass reads the pool
+                # through the varlen kernel and never asks this cache for a
+                # context, so neither setting would have any effect here.
+                lazy_read=False,
+            )
+        else:
+            rt.cache.reset()
+        rt.cache.begin_step(block_table)
+
+        cached = int(getattr(info, "num_cached_tokens", 0) or 0)
+        total = len(rt.tokens)
+        chunk_end = int(getattr(info, "prefill_chunk_end", 0) or 0)
+        if chunk_end <= 0 or chunk_end > total:
+            chunk_end = total
+        if cached >= total:
+            cached, chunk_end = 0, total
+        if chunk_end <= cached:
+            # Budget exhausted for this sequence; it resumes next step.
+            return None
+
+        rt.num_prefills += 1
+        return {
+            "rt": rt,
+            "kind": "prefill",
+            "slot": slot,
+            "block_table": list(block_table),
+            "tokens": list(rt.tokens[cached:chunk_end]),
+            "positions": list(range(cached, chunk_end)),
+            "cached": cached,
+            "chunk_end": chunk_end,
+            "is_final": chunk_end >= total,
+        }
+
+    def _prepare_fused_decode(self, info, slot: int):
+        rt = self.runtimes.get(info.seq_id)
+        if rt is None or rt.done or rt.cache is None:
+            return None
+        self._begin_write_step(rt, info)
+        return {
+            "rt": rt,
+            "kind": "decode",
+            "slot": slot,
+            "block_table": list(info.block_table),
+            "tokens": [rt.tokens[-1]],
+            "positions": [rt.cache.position],
+        }
+
+    def _run_fused_step(self, prefill_infos, decode_infos):
+        """
+        One forward pass serving a prefill chunk and several decode tokens.
+
+        The tokens are packed into a single row with no padding, and each one
+        carries the sequence it belongs to and its absolute position. Attention
+        masks from those positions rather than from a batch mask, which is the
+        only way to express a pass where every row has a different context
+        length; see `kernels/varlen_attention.py`.
+
+        Returns None if the step turns out not to be fusible after preparation
+        -- for instance when the prefill budget left the chunk empty -- and the
+        caller then runs the ordinary unfused paths. Preparation is side-effecting
+        on the caches, so this must not be called speculatively and then
+        discarded; the "not fusible" cases are all ones where nothing was
+        prepared.
+        """
+        plan = []
+        for info in prefill_infos:
+            entry = self._prepare_fused_prefill(info, len(plan))
+            if entry is not None:
+                plan.append(entry)
+        prefill_count = len(plan)
+        for info in decode_infos:
+            entry = self._prepare_fused_decode(info, len(plan))
+            if entry is not None:
+                plan.append(entry)
+
+        # Still needs both kinds, or there is nothing to fuse and the ordinary
+        # paths do it better. Nothing has been written yet at this point, so
+        # handing the step back is safe.
+        if prefill_count == 0 or len(plan) == prefill_count:
+            for entry in plan:
+                if entry["kind"] == "prefill":
+                    entry["rt"].num_prefills -= 1
+            return None
+
+        block_tables = [
+            PagedKVPool.block_table_tensor(entry["block_table"], self.device)
+            for entry in plan
+        ]
+        seq_ids: List[int] = []
+        positions: List[int] = []
+        token_ids: List[int] = []
+        for entry in plan:
+            entry["rows"] = list(range(len(seq_ids), len(seq_ids) + len(entry["tokens"])))
+            seq_ids.extend([entry["slot"]] * len(entry["tokens"]))
+            positions.extend(entry["positions"])
+            token_ids.extend(entry["tokens"])
+
+        cache = VarlenPackedCache(
+            self.pool, self.spec.num_layers, block_tables, seq_ids, positions
+        )
+        input_ids = torch.tensor([token_ids], dtype=torch.long, device=self.device)
+        # Absolute positions, so RoPE sees each token where it really sits. A
+        # packed run's index means nothing across sequences, so this cannot be
+        # left to transformers to infer.
+        position_ids = torch.tensor([positions], dtype=torch.long, device=self.device)
+
+        # The backend is switched on for this forward only. Leaving the model
+        # rerouted would send ordinary decodes through it as well, where they
+        # would find no binding and silently fall back to eager attention
+        # instead of the model's configured implementation.
+        with attention_backend.backend_enabled_on(self.model) as routed:
+            if not routed:
+                raise RuntimeError(
+                    "fused pass needs the attention registry, which is "
+                    "unavailable; fused_prefill should have been disabled"
+                )
+            with attention_backend.varlen_attention_context(
+                self.pool, block_tables, seq_ids, positions
+            ) as bound:
+                with torch.no_grad():
+                    out = self.model(
+                        input_ids=input_ids,
+                        position_ids=position_ids,
+                        past_key_values=cache,
+                        use_cache=True,
+                    )
+        if bound.used != self.spec.num_layers:
+            # Every layer must have taken the varlen path. A layer that fell
+            # back would have used transformers' mask, which for a packed run
+            # lets one sequence attend to another -- fluent, confident, wrong.
+            raise RuntimeError(
+                f"fused pass: {bound.used} of {self.spec.num_layers} layers used "
+                f"the varlen kernel"
+            )
+
+        self.total_forward_passes += 1
+        self.total_fused_steps += 1
+        self.total_fused_tokens += len(token_ids)
+
+        events: List[TokenEvent] = []
+        for entry in plan:
+            rt = entry["rt"]
+            last_row = entry["rows"][-1]
+            if entry["kind"] == "prefill":
+                # The pass wrote this chunk's K/V through the packed cache, so
+                # the sequence's own cursor is moved here rather than by its
+                # cache's update().
+                rt.cache.seed_position(entry["chunk_end"])
+                self.total_prefill_tokens += len(entry["tokens"])
+                self.total_cached_prefix_tokens += entry["cached"]
+                self.total_prefill_chunks += 1
+                if not entry["is_final"]:
+                    # Mid-prompt logits are not a continuation; sampling them
+                    # would emit garbage. The first token comes when the whole
+                    # prompt is resident.
+                    continue
+                if self.prefix_cache is not None:
+                    self.prefix_cache.register_full_blocks(
+                        rt.tokens, entry["block_table"]
+                    )
+            else:
+                for layer in rt.cache.layers:
+                    layer.position += 1
+
+            token_id = sample_logits(out.logits[0, last_row], rt.params, rt.generator)
+            ev = self._accept_token(rt, token_id, source="target")
+            if ev is not None:
+                events.append(ev)
+
+        return events
 
     # -------------------------------------------------------- copy-on-write
 
@@ -1018,6 +1279,9 @@ class ContinuousBatchingEngine:
             "cached_prefix_tokens": self.total_cached_prefix_tokens,
             "cow_copies": self.total_cow_copies,
             "prefill_chunks": self.total_prefill_chunks,
+            "fused_prefill_enabled": self.fused_prefill,
+            "fused_steps": self.total_fused_steps,
+            "fused_tokens": self.total_fused_tokens,
             "chunked_prefill_enabled": self.max_prefill_tokens_per_step > 0,
             "max_prefill_tokens_per_step": self.max_prefill_tokens_per_step,
             "speculation_enabled": self.speculation_enabled,

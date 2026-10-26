@@ -308,10 +308,11 @@ These are deliberate scope boundaries, not unknowns:
    step.~~ **Chunked prefill resolved 2026-10-26 (Phase C bullet 1):** a long
    prompt is now spread over steps under a per-step token budget, cutting the
    worst-case stall it inflicts on an in-flight request from 15.96x to 2.54x.
-   The remaining 2.5x floor is the *other* half of the limitation: a step
-   carrying a prefill chunk still runs a second forward pass for decode rather
-   than fusing them, which needs varlen paged attention. Prefill itself is also
-   still one sequence per step.
+   **Fusion resolved too (bullet 2):** with `fused_prefill=True` a chunk and
+   the step's decode tokens go through ONE packed forward pass, taking the
+   worst stall to ~1.8x-2.2x. The remaining residual is no longer structural --
+   it is the chunk's own token count, since a fused step still carries the
+   chunk alongside the decode. Prefill itself is still one sequence per step.
 4. ~~**Speculative decoding is single-sequence**, serialized behind a lock, and
    not integrated with the continuous-batching scheduler.~~ **Resolved
    2026-10-26 (Phase D).** `ContinuousBatchingEngine(draft_model=...,
@@ -386,7 +387,7 @@ Implemented. Measured results and design notes in section 10 below.
   telemetry keys are served; the visualizer component itself is Track 4's
   deliverable.
 
-### Phase C — Chunked prefill and prefill/decode fusion ⚠️ **BULLET 1 DONE 2026-10-26**
+### Phase C — Chunked prefill and prefill/decode fusion ✅ **BOTH BULLETS DONE 2026-10-26**
 
 - [x] Split long prompts into block-sized chunks across steps so one long prompt
       cannot stall decoding for everyone (fixes limitations 1 and 3 of the
@@ -398,16 +399,63 @@ Implemented. Measured results and design notes in section 10 below.
       prompt arrives. Output is byte-identical at every budget from 64 down to
       1, which is the property that matters -- a chunk boundary in the wrong
       place changes the KV, not the control flow.
-- [ ] Mix prefill chunks and decode tokens in a single batched pass. **Not
-      done.** This is why the stall ratio floors at ~2.5x rather than ~1x: a
-      step that carries a prefill chunk runs *two* forward passes, one for the
-      chunk and one for decode. Fusing them needs varlen paged attention (one
-      pass over rows of different query lengths), which the current
-      uniform-width batched path cannot express.
+- [x] Mix prefill chunks and decode tokens in a single batched pass.
+      **Done 2026-10-26.** `ContinuousBatchingEngine(fused_prefill=True)`, via
+      `kernels/varlen_attention.py` and `runtime/varlen_cache.py`.
+
+      The obstacle was never the scheduler -- it already emits a prefill chunk
+      and decode tokens in the same step -- but attention. The rows of such a
+      step have different query lengths *and* different context lengths, so
+      there is no shared `kv_len` and the standard `(batch, 1, q_len, kv_len)`
+      mask cannot express it. The fix is to pack every token into one
+      unpadded row carrying its own sequence id and absolute position, and let
+      attention mask from those positions: `key_position <= query_position`,
+      per token. Prefill and decode then stop being separate cases, which is
+      what lets one pass serve both.
+
+      Measured (512-token intruder, 16-token victim, SmolLM2-360M, CPU;
+      `--fused` arm of `run_chunked_prefill.py`):
+
+      | budget | passes, unfused | passes, fused | worst stall, unfused | worst stall, fused |
+      |-------:|----------------:|--------------:|---------------------:|-------------------:|
+      | 64     | 24              | 16            | 7.27x                | 5.17x              |
+      | 16     | 50              | 38            | 3.05x                | 2.48x              |
+      | 4      | 152             | 140           | 1.97x                | 1.83x              |
+
+      Output is token-identical to the unfused path at every budget tested, and
+      the logits match to <2e-4 -- a tolerance, not equality, because the
+      varlen kernel reduces in a different order than transformers' attention.
+
+      **A false start worth recording.** The first implementation used only the
+      block-wise varlen kernel, which keeps working memory at
+      `O(rows x block_size)` and is the shape a GPU kernel takes. It removed
+      the forward passes exactly as intended (24 -> 16) and made latency
+      *worse*: the worst stall went from 5.37x to 12.02x. A 512-token context
+      at block 16 is 32 Python loop iterations per layer, and that interpreter
+      overhead cost more than the whole pass it saved. So there are now two
+      varlen implementations, proved equal to each other and to an independent
+      reference: a materialised one that gathers each context in a single
+      `index_select` (the default, and what the numbers above use) and the
+      block-wise one that bounds working memory. That is the same split as
+      Phase A's tiers 1 and 3, for the same reason.
 - **Done when:** p99 inter-token latency for an in-flight request is unaffected by
-  a 2,000-token prompt arriving, with a benchmark demonstrating it. **Not met:**
-  2.54x is a large improvement but it is not "unaffected", and closing the gap
-  is exactly the unimplemented second bullet.
+  a 2,000-token prompt arriving, with a benchmark demonstrating it.
+  **Borderline, and reported as borderline.** At budget 4 with fusion the worst
+  stall is **1.8x-2.2x the victim's own median across four repeat runs**
+  (1.83, 1.98, 2.03, 2.24), against 2.2x-2.9x for chunking alone. The
+  benchmark's own threshold is 2.0x, so individual runs land on either side of
+  it; the honest summary is that fusion consistently improves the figure by
+  roughly 0.6x and leaves it sitting on the threshold rather than clearly under
+  it.
+
+  What changed is *which* thing is the floor. Before fusion the residual was
+  structural -- the second forward pass -- and no budget could remove it, which
+  is why the ratio asymptoted near 2.5x. That pass is gone. What remains is the
+  chunk's own token count: a fused step still carries the chunk's tokens
+  alongside the decode's single token, so it is inherently longer than a pure
+  decode step, and the only way further down is a smaller budget (which costs
+  prefill throughput, visible in the intruder TTFT column). Reaching a clean
+  1.0x would need the chunk's cost to vanish, which it cannot.
 
 ### Phase D — Speculative decoding inside continuous batching ⚠️ **COMPOSES 2026-10-26; DoD BLOCKED**
 

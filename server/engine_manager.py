@@ -148,6 +148,7 @@ class EngineManager:
             max_prefill_tokens_per_step=cfg.max_prefill_tokens_per_step,
             draft_model=self.draft_model if speculate_in_batch else None,
             lookahead_k=cfg.lookahead_k if speculate_in_batch else 0,
+            fused_prefill=cfg.fused_prefill,
         )
         pool = self.engine.pool.describe()
         LOGGER.info(
@@ -159,6 +160,7 @@ class EngineManager:
                 "capacity_tokens": pool["capacity_tokens"],
                 "device": pool["device"],
                 "batched_speculation": self.engine.speculation_enabled,
+                "fused_prefill": self.engine.fused_prefill,
                 "lookahead_k": self.engine.lookahead_k,
             },
         )
