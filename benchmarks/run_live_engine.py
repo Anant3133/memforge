@@ -25,7 +25,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import platform
 import statistics
 import sys
 import time
@@ -39,6 +38,12 @@ if str(PROJECT_ROOT) not in sys.path:
 import torch  # noqa: E402
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
+from _device import (  # noqa: E402
+    add_device_args,
+    describe_device,
+    peak_memory_mb,
+    resolve_device,
+)
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine  # noqa: E402
 from memforge_ml.runtime.kv_pool import ModelKVSpec, PagedKVPool  # noqa: E402
 from memforge_ml.runtime.sampling import SamplingParams  # noqa: E402
@@ -350,6 +355,7 @@ def bench_speculative(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="MemForge live engine benchmark")
+    add_device_args(parser)
     parser.add_argument("--tokens", type=int, default=32)
     parser.add_argument("--concurrency", type=int, nargs="+", default=[1, 2, 4])
     parser.add_argument("--lookahead-k", type=int, default=4)
@@ -363,15 +369,19 @@ def main() -> int:
         default=str(PROJECT_ROOT / "benchmarks" / "results" / "live_engine.json"),
     )
     args = parser.parse_args()
+    # Resolved here, before any banner or model load, so everything
+    # below can rely on it. An explicit --device cuda fails here
+    # rather than silently producing CPU numbers labelled cuda.
+    device, dtype = resolve_device(args)
 
     print("MemForge live engine benchmark")
     row("target model", args.target_model)
     row("draft model", "(skipped)" if args.skip_speculative else args.draft_model)
-    row("device", "cuda" if torch.cuda.is_available() else "cpu")
+    row("device", f"{args.device} -> resolved below")
     row("torch", torch.__version__)
 
-    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Was auto-detect only; now honours --device/--dtype, and an explicit
+    # --device cuda fails rather than silently measuring the CPU.
 
     tokenizer = AutoTokenizer.from_pretrained(args.target_model)
     if tokenizer.pad_token is None:
@@ -382,10 +392,8 @@ def main() -> int:
     report: Dict[str, Any] = {
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "environment": {
-            "platform": platform.platform(),
-            "python": platform.python_version(),
-            "torch": torch.__version__,
-            "device": device,
+            **describe_device(device, dtype),
+            "peak_memory_mb": peak_memory_mb(device),
             "dtype": str(dtype),
             "cuda_available": torch.cuda.is_available(),
             "cpu_count": os.cpu_count(),

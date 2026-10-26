@@ -64,7 +64,6 @@ class NaiveBaselineRunner:
 
         with torch.no_grad():
             for step in range(max_new_tokens):
-                step_start = time.perf_counter()
 
                 # Naive forward pass over the entire growing sequence (re-reading words 1..N-1)
                 outputs = self.model(curr_input_ids)

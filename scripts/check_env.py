@@ -35,7 +35,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, List
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

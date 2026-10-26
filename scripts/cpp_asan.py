@@ -10,21 +10,28 @@ recycled block, a read past the end of a block table, a double free. Those
 corrupt silently, and the symptom is wrong KV, which produces fluent and
 confident wrong text rather than a crash.
 
-So this script runs `tests/cpp/asan_sustained_load.cpp` twice:
+What it runs depends on the platform, and the difference is worth knowing:
 
-  1. **AddressSanitizer** (`/fsanitize=address`) -- use-after-free, heap buffer
-     overflow, double free.
-  2. **CRT debug heap** (`_CRTDBG_LEAK_CHECK_DF`) -- unfreed heap allocations at
-     exit.
+  * **Linux / macOS** -- one pass with `-fsanitize=address`. gcc and clang ship
+    LeakSanitizer alongside it, so leaks, use-after-free and buffer overflows
+    are all covered at once.
+  * **Windows (MSVC)** -- two passes, because MSVC's AddressSanitizer has **no
+    leak detection**; it ships no LeakSanitizer. So `/fsanitize=address` covers
+    the memory errors and a second build against the debug CRT with
+    `_CRTDBG_LEAK_CHECK_DF` covers leaks.
 
-Pass 2 exists because **MSVC's AddressSanitizer does not detect leaks on
-Windows**: it ships no LeakSanitizer. That is verified here rather than taken on
-trust -- `--verify-tooling` compiles a program with a known leak, a known
-use-after-free and a known overflow, and reports which of the three each pass
-actually catches. A sanitizer that silently detects nothing looks exactly like
-clean code, so the capability check is part of the result, not a footnote.
+The two-pass arrangement is a workaround for the weaker platform, not the
+intended design.
 
-Usage:
+None of that is taken on trust. `--verify-tooling` compiles
+`tests/cpp/sanitizer_probe.cpp`, which holds a known leak, a known
+use-after-free and a known overflow, and reports which defect classes each pass
+actually caught. A sanitizer that silently detects nothing looks exactly like
+clean code, so the capability check is part of the result rather than a
+footnote -- and it has already caught two configuration faults that would
+otherwise have read as success.
+
+Usage (identical on every platform):
     python scripts/cpp_asan.py
     python scripts/cpp_asan.py --cycles 100 --requests 16
     python scripts/cpp_asan.py --verify-tooling
@@ -123,6 +130,53 @@ def msvc_build(
     return True, output
 
 
+def posix_build(
+    sources: List[str],
+    exe: Path,
+    extra_flags: List[str],
+    defines: List[str],
+) -> Tuple[bool, str]:
+    """
+    Compile with clang++ or g++ on Linux/macOS.
+
+    clang++ is preferred where both exist: its AddressSanitizer diagnostics name
+    the allocation site as well as the fault, which is the difference between
+    "something freed this twice" and "this line freed it".
+    """
+    compiler = shutil.which("clang++") or shutil.which("g++")
+    if compiler is None:
+        return False, "neither clang++ nor g++ is on PATH"
+
+    command = [
+        compiler, "-std=c++17", "-g", "-O1",
+        *extra_flags, *defines,
+        "-I", "engine/include",
+        *sources, "-o", str(exe),
+    ]
+    done = subprocess.run(
+        command, capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=1800
+    )
+    output = (done.stdout or "") + (done.stderr or "")
+    if done.returncode != 0 or not exe.exists() or exe.stat().st_size == 0:
+        return False, f"$ {' '.join(command)}\n{output}"
+    return True, output
+
+
+def build(
+    sources: List[str],
+    exe: Path,
+    obj_dir: Path,
+    msvc_flags: str,
+    posix_flags: List[str],
+    msvc_defines: str = "",
+    posix_defines: Optional[List[str]] = None,
+) -> Tuple[bool, str]:
+    """Dispatch to whichever toolchain this platform has."""
+    if sys.platform == "win32":
+        return msvc_build(sources, exe, obj_dir, msvc_flags, msvc_defines)
+    return posix_build(sources, exe, posix_flags, posix_defines or [])
+
+
 def run_exe(exe: Path, args: List[str], cwd: Path) -> Tuple[int, str]:
     """
     Run a freshly built executable.
@@ -155,6 +209,46 @@ def classify(output: str) -> List[str]:
     return found
 
 
+def sanitizer_passes() -> List[dict]:
+    """
+    The passes to run on this platform.
+
+    On Linux/macOS one pass suffices: `-fsanitize=address` there includes
+    LeakSanitizer. On Windows it does not, so leaks need a separate debug-CRT
+    build. Keeping this in one function is what stops `--verify-tooling` from
+    certifying a different configuration than the one that actually runs.
+    """
+    if sys.platform == "win32":
+        return [
+            {
+                "name": "AddressSanitizer",
+                "msvc_flags": "/fsanitize=address /MD /Od",
+                "msvc_defines": "",
+                "posix_flags": [],
+                "posix_defines": [],
+                "needs_dll": True,
+            },
+            {
+                "name": "CRT debug heap",
+                "msvc_flags": "/MDd /Od",
+                "msvc_defines": "/DMEMFORGE_CRT_LEAK_CHECK",
+                "posix_flags": [],
+                "posix_defines": [],
+                "needs_dll": False,
+            },
+        ]
+    return [
+        {
+            "name": "AddressSanitizer + LeakSanitizer",
+            "msvc_flags": "",
+            "msvc_defines": "",
+            "posix_flags": ["-fsanitize=address", "-fno-omit-frame-pointer"],
+            "posix_defines": [],
+            "needs_dll": False,
+        }
+    ]
+
+
 def verify_tooling() -> int:
     """
     Establish what each pass can actually detect, using known defects.
@@ -168,17 +262,19 @@ def verify_tooling() -> int:
         print(f"missing {probe.relative_to(PROJECT_ROOT)}")
         return 1
 
-    passes = {
-        "AddressSanitizer": ("/fsanitize=address /MD", "", True),
-        "CRT debug heap": ("/MDd", "/DMEMFORGE_CRT_LEAK_CHECK", False),
-    }
     expected = ["leak", "use-after-free", "buffer-overflow"]
     table: Dict[str, Dict[str, bool]] = {}
 
-    for name, (flags, defines, needs_dll) in passes.items():
+    for spec in sanitizer_passes():
+        name = spec["name"]
+        needs_dll = spec["needs_dll"]
         obj = Path(tempfile.mkdtemp(prefix="memforge_probe_"))
-        exe = obj / "probe.exe"
-        ok, output = msvc_build([str(probe)], exe, obj, flags, defines)
+        exe = obj / ("probe.exe" if sys.platform == "win32" else "probe")
+        ok, output = build(
+            [str(probe)], exe, obj,
+            spec["msvc_flags"], spec["posix_flags"],
+            spec["msvc_defines"], spec["posix_defines"],
+        )
         if not ok:
             print(f"  {name}: BUILD FAILED")
             print("   " + output.strip().replace("\n", "\n   ")[:800])
@@ -205,14 +301,17 @@ def verify_tooling() -> int:
         cells = "".join(("detected" if row[m] else "MISSED").ljust(20) for m in expected)
         print(f"  {name.ljust(width)}{cells}")
 
-    asan = table.get("AddressSanitizer", {})
-    crt = table.get("CRT debug heap", {})
     print()
-    if not asan.get("leak", False):
+    asan = table.get("AddressSanitizer", {})
+    if sys.platform == "win32" and not asan.get("leak", False):
         print("  AddressSanitizer misses leaks on this toolchain, as expected:")
         print("  MSVC ships no LeakSanitizer. This is why the CRT debug-heap")
         print("  pass exists, and why running ASan alone would not close the")
         print("  Phase F item.")
+    elif sys.platform != "win32":
+        print("  One pass covers everything here: gcc/clang ship LeakSanitizer")
+        print("  with AddressSanitizer, so the second Windows-only pass is")
+        print("  unnecessary on this platform.")
     covered = {m for row in table.values() for m, hit in row.items() if hit}
     missing = [m for m in expected if m not in covered]
     if missing:
@@ -223,14 +322,17 @@ def verify_tooling() -> int:
     return 0
 
 
-def run_pass(name: str, flags: str, defines: str, needs_dll: bool,
-             cycles: int, requests: int) -> Tuple[bool, List[str]]:
+def run_pass(spec: dict, cycles: int, requests: int) -> Tuple[bool, List[str]]:
+    name = spec["name"]
+    needs_dll = spec["needs_dll"]
     banner(f"{name}: sustained load, {cycles} cycles x {requests} requests")
     obj = Path(tempfile.mkdtemp(prefix="memforge_asan_"))
-    exe = obj / "sustained_load.exe"
+    exe = obj / ("sustained_load.exe" if sys.platform == "win32" else "sustained_load")
     try:
-        ok, output = msvc_build(
-            [DRIVER, *ENGINE_SOURCES], exe, obj, flags, defines
+        ok, output = build(
+            [DRIVER, *ENGINE_SOURCES], exe, obj,
+            spec["msvc_flags"], spec["posix_flags"],
+            spec["msvc_defines"], spec["posix_defines"],
         )
         if not ok:
             print("  BUILD FAILED")
@@ -265,10 +367,6 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if sys.platform != "win32":
-        print("This script drives MSVC; on Linux use g++ -fsanitize=address,leak")
-        return 1
-
     tooling = verify_tooling()
     if args.verify_tooling:
         return tooling
@@ -276,16 +374,10 @@ def main() -> int:
         print("\nRefusing to report a clean result with unverified tooling.")
         return 1
 
-    passes = [
-        ("AddressSanitizer", "/fsanitize=address /MD /Od", "", True),
-        ("CRT debug heap", "/MDd /Od", "/DMEMFORGE_CRT_LEAK_CHECK", False),
-    ]
     results = []
-    for name, flags, defines, needs_dll in passes:
-        clean, defects = run_pass(
-            name, flags, defines, needs_dll, args.cycles, args.requests
-        )
-        results.append((name, clean, defects))
+    for spec in sanitizer_passes():
+        clean, defects = run_pass(spec, args.cycles, args.requests)
+        results.append((spec["name"], clean, defects))
 
     banner("Verdict")
     for name, clean, defects in results:

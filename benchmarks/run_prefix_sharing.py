@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import platform
 import statistics
 import sys
 import time
@@ -42,6 +41,12 @@ import torch  # noqa: E402
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
 from memforge_ml.model_defaults import DEFAULT_TARGET_MODEL  # noqa: E402
+from _device import (  # noqa: E402
+    add_device_args,
+    describe_device,
+    peak_memory_mb,
+    resolve_device,
+)
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine  # noqa: E402
 from memforge_ml.runtime.sampling import SamplingParams  # noqa: E402
 
@@ -155,19 +160,24 @@ def main() -> int:
     parser.add_argument("--tokens", type=int, default=16, help="tokens generated per request")
     parser.add_argument("--prefix-tokens", type=int, default=512,
                         help="length of the shared system prompt, in tokens")
+    add_device_args(parser)
     parser.add_argument("--block-size", type=int, default=16)
     parser.add_argument("--num-blocks", type=int, default=600)
     args = parser.parse_args()
+    # Resolved here, before any banner or model load, so everything
+    # below can rely on it. An explicit --device cuda fails here
+    # rather than silently producing CPU numbers labelled cuda.
+    device, dtype = resolve_device(args)
 
     banner("MemForge Phase B -- Prefix Sharing (Copy-on-Write)")
     print(f"model            : {args.model}")
     print(f"shared prefix    : {args.prefix_tokens} tokens")
     print(f"generated tokens : {args.tokens} per request")
     print(f"pool             : {args.num_blocks} blocks x {args.block_size} tokens")
-    print(f"device           : cpu (torch {torch.__version__})")
+    print(f"device           : {device} {dtype} (torch {torch.__version__})")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype).to(device)
     model.eval()
 
     rows: List[Dict[str, Any]] = []
@@ -246,12 +256,10 @@ def main() -> int:
         "benchmark": "prefix_sharing",
         "phase": "B",
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "platform": {
-            "system": platform.system(),
-            "python": platform.python_version(),
-            "torch": torch.__version__,
-            "device": "cpu",
-        },
+        "platform": describe_device(device, dtype),
+        # None on CPU, not 0.0: torch has no CPU allocator to query, and a zero
+        # would read as "measured, and it was nothing".
+        "peak_memory_mb": peak_memory_mb(device),
         "config": {
             "model": args.model,
             "prefix_tokens": args.prefix_tokens,

@@ -148,7 +148,7 @@ def run_stage_2_pybind_verification() -> tuple[bool, float, str]:
 
         # Test scheduler bindings
         sched = memforge_c.Scheduler(alloc, 32)
-        seq = sched.add_sequence(1, [101, 102, 103], 20)
+        sched.add_sequence(1, [101, 102, 103], 20)
         assert sched.get_num_waiting() == 1
         step_res = sched.step()
         assert len(step_res.running_sequences) == 1

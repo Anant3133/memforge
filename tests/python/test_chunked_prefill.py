@@ -11,7 +11,6 @@ drifts, so the comparisons here are on exact token ids.
 from __future__ import annotations
 
 import pytest
-import torch
 
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine
 from memforge_ml.runtime.sampling import SamplingParams

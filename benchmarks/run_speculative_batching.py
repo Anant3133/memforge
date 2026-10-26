@@ -42,7 +42,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import platform
 import sys
 import time
 from pathlib import Path
@@ -58,6 +57,12 @@ from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 from memforge_ml.model_defaults import (  # noqa: E402
     DEFAULT_DRAFT_MODEL,
     DEFAULT_TARGET_MODEL,
+)
+from _device import (  # noqa: E402
+    add_device_args,
+    describe_device,
+    peak_memory_mb,
+    resolve_device,
 )
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine  # noqa: E402
 from memforge_ml.runtime.sampling import SamplingParams  # noqa: E402
@@ -155,9 +160,14 @@ def main() -> int:
     parser.add_argument("--batch-sizes", type=int, nargs="+", default=[1, 2, 4, 8])
     parser.add_argument("--lookahead", type=int, default=4)
     parser.add_argument("--max-new-tokens", type=int, default=32)
+    add_device_args(parser)
     parser.add_argument("--block-size", type=int, default=16)
     parser.add_argument("--kv-budget-mb", type=float, default=512.0)
     args = parser.parse_args()
+    # Resolved here, before any banner or model load, so everything
+    # below can rely on it. An explicit --device cuda fails here
+    # rather than silently producing CPU numbers labelled cuda.
+    device, dtype = resolve_device(args)
 
     if max(args.batch_sizes) > len(PROMPT_POOL):
         parser.error(
@@ -170,18 +180,18 @@ def main() -> int:
     print(f"draft model  : {'(self)' if args.self_draft else args.draft_model}")
     print(f"lookahead K  : {args.lookahead}  (scheduler reserves K+1 = "
           f"{args.lookahead + 1} slots per sequence per step)")
-    print(f"device       : cpu  (cuda available: {torch.cuda.is_available()})")
+    print(f"device       : {device} {dtype}")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype).to(device)
     model.eval()
 
     if args.self_draft:
         draft_model = model
     else:
         draft_model = AutoModelForCausalLM.from_pretrained(
-            args.draft_model, dtype=torch.float32
-        )
+            args.draft_model, dtype=dtype
+        ).to(device)
         draft_model.eval()
 
     rows: List[Dict[str, Any]] = []
@@ -283,13 +293,10 @@ def main() -> int:
         "benchmark": "speculative_batching",
         "phase": "D",
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "platform": {
-            "system": platform.system(),
-            "python": platform.python_version(),
-            "torch": torch.__version__,
-            "device": "cpu",
-            "cuda_available": torch.cuda.is_available(),
-        },
+        "platform": describe_device(device, dtype),
+        # None on CPU, not 0.0: torch has no CPU allocator to query, and a zero
+        # would read as "measured, and it was nothing".
+        "peak_memory_mb": peak_memory_mb(device),
         "config": {
             "model": args.model,
             "draft_model": "(self)" if args.self_draft else args.draft_model,

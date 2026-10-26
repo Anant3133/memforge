@@ -271,7 +271,6 @@ def test_copy_on_write_copies_then_privatises(tiny_model, stub_tokenizer):
     block and this path is unreachable in normal operation. An unexercised safety
     mechanism is worthless, so the sharing is induced deliberately here.
     """
-    import memforge_c
 
     engine = make_engine(tiny_model, stub_tokenizer, sharing=True)
     seq_id = engine.submit(ids_for(40), greedy(4))

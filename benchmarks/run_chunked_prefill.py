@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import platform
 import statistics
 import sys
 import time
@@ -43,10 +42,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import torch  # noqa: E402
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
 from memforge_ml.model_defaults import DEFAULT_TARGET_MODEL  # noqa: E402
+from _device import (  # noqa: E402
+    add_device_args,
+    describe_device,
+    peak_memory_mb,
+    resolve_device,
+)
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine  # noqa: E402
 from memforge_ml.runtime.sampling import SamplingParams  # noqa: E402
 
@@ -201,9 +205,14 @@ def main() -> int:
         help="also run each budget with prefill/decode fusion on (Phase C "
              "bullet 2), to separate it from chunking alone",
     )
+    add_device_args(parser)
     parser.add_argument("--block-size", type=int, default=16)
     parser.add_argument("--kv-budget-mb", type=float, default=1024.0)
     args = parser.parse_args()
+    # Resolved here, before any banner or model load, so everything
+    # below can rely on it. An explicit --device cuda fails here
+    # rather than silently producing CPU numbers labelled cuda.
+    device, dtype = resolve_device(args)
 
     banner("MemForge Phase C — does a long prompt stall in-flight decoding?")
     print(f"model            : {args.model}")
@@ -213,7 +222,7 @@ def main() -> int:
     print(f"budgets          : {args.budgets}  (0 = unlimited, the old behaviour)")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype).to(device)
     model.eval()
 
     long_prompt = build_prompt(tokenizer, args.prompt_tokens)
@@ -298,16 +307,38 @@ def main() -> int:
         # the median however small the chunk gets. Shrinking the budget past
         # that point buys nothing and costs prefill throughput, which the
         # intruder TTFT column shows directly.
-        met = best["stall_ratio"] <= 2.0
+        # Chunking has to actually *help* before "met" means anything. On a GPU
+        # with a small model the unchunked baseline can already be well under
+        # the 2.0x bar -- a 512-token prefill is cheap there relative to a
+        # decode step -- and chunking then adds per-step overhead and makes the
+        # stall worse. An earlier version of this check only compared the best
+        # chunked run against the 2.0x threshold, so it reported "target met"
+        # on a run where chunking had degraded the very thing it exists to fix.
+        helped = best["stall_ratio"] < baseline["stall_ratio"]
+        met = helped and best["stall_ratio"] <= 2.0
         floor_reached = (
-            len([r for r in rows if r["budget"] > 0]) >= 2
+            helped
+            and len([r for r in rows if r["budget"] > 0]) >= 2
             and best["stall_ratio"] <= 3.0
         )
-        verdict = (
-            f"Phase C bullet 1 (chunked prefill): worst-case stall cut "
-            f"{improvement:.1f}x, from {baseline['stall_ratio']}x the victim's "
-            f"median to {best['stall_ratio']}x at budget {best['budget']}."
-        )
+        if helped:
+            verdict = (
+                f"Phase C bullet 1 (chunked prefill): worst-case stall cut "
+                f"{improvement:.1f}x, from {baseline['stall_ratio']}x the victim's "
+                f"median to {best['stall_ratio']}x at budget {best['budget']}."
+            )
+        else:
+            verdict = (
+                f"Phase C bullet 1 (chunked prefill): NO IMPROVEMENT here. The "
+                f"unchunked baseline already stalls only "
+                f"{baseline['stall_ratio']}x, and the best chunked run is "
+                f"{best['stall_ratio']}x at budget {best['budget']} -- chunking "
+                f"made it worse. That is the expected shape when a prefill is "
+                f"cheap relative to a decode step, which is the case for a "
+                f"small model on a GPU: the extra scheduler steps cost more "
+                f"than the stall they avoid. Chunking is a latency tool for "
+                f"the regime where prefill dominates."
+            )
         if met:
             verdict += " Target met: in-flight decoding is effectively unaffected."
         elif floor_reached:
@@ -331,20 +362,25 @@ def main() -> int:
                     " Re-run with --fused to measure bullet 2, which removes "
                     "that second pass."
                 )
-        else:
+        elif helped:
             verdict += " Target NOT met; try smaller budgets to find the floor."
+        else:
+            # Smaller budgets would only add more steps, which is what hurt.
+            verdict += (
+                " Smaller budgets will not help: more steps is the cost, not "
+                "the cure. Re-measure where prefill actually dominates -- a "
+                "longer prompt, a larger model, or CPU execution."
+            )
         print(verdict)
 
     payload = {
         "benchmark": "chunked_prefill",
         "phase": "C",
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "platform": {
-            "system": platform.system(),
-            "python": platform.python_version(),
-            "torch": torch.__version__,
-            "device": "cpu",
-        },
+        "platform": describe_device(device, dtype),
+        # None on CPU, not 0.0: torch has no CPU allocator to query, and a zero
+        # would read as "measured, and it was nothing".
+        "peak_memory_mb": peak_memory_mb(device),
         "config": {
             "model": args.model,
             "prompt_tokens": args.prompt_tokens,

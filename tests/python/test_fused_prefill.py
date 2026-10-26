@@ -402,8 +402,6 @@ def test_fused_logits_match_the_unfused_logits(tiny_model, stub_tokenizer):
     fused engine's packed logits are compared row by row against the unfused
     engine's two separate passes.
     """
-    import torch
-
     budget = 16
     captured = {}
 
@@ -428,7 +426,7 @@ def test_fused_logits_match_the_unfused_logits(tiny_model, stub_tokenizer):
 
     # Run both to the same point, then capture only the step of interest.
     for engine, key in ((fused, "fused"), (plain, "plain")):
-        victim = engine.submit("hello there", GREEDY)
+        engine.submit("hello there", GREEDY)
         for _ in range(3):
             engine.step()
         engine.submit(long_prompt(60), GREEDY)

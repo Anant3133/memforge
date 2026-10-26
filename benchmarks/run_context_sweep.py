@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import platform
 import statistics
 import sys
 import time
@@ -50,6 +49,12 @@ from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 from transformers.cache_utils import DynamicCache  # noqa: E402
 
 from memforge_ml.model_defaults import DEFAULT_TARGET_MODEL  # noqa: E402
+from _device import (  # noqa: E402
+    add_device_args,
+    describe_device,
+    peak_memory_mb,
+    resolve_device,
+)
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine  # noqa: E402
 from memforge_ml.runtime.kv_pool import ModelKVSpec, PagedKVPool  # noqa: E402
 from memforge_ml.runtime.decode_view_cache import capacity_for  # noqa: E402
@@ -205,6 +210,7 @@ def main() -> int:
     parser.add_argument("--steps", type=int, default=8, help="decode steps per run")
     parser.add_argument("--repeats", type=int, default=3,
                         help="interleaved repeats; the median is reported")
+    add_device_args(parser)
     parser.add_argument("--block-size", type=int, default=16)
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--kv-budget-mb", type=float, default=1024.0)
@@ -212,16 +218,20 @@ def main() -> int:
     parser.add_argument("--view-cache", action="store_true",
                         help="also measure the append-only decode mirror (tier 2)")
     args = parser.parse_args()
+    # Resolved here, before any banner or model load, so everything
+    # below can rely on it. An explicit --device cuda fails here
+    # rather than silently producing CPU numbers labelled cuda.
+    device, dtype = resolve_device(args)
 
     banner("MemForge Phase A — paged vs contiguous across context lengths")
     print(f"model       : {args.model}")
     print(f"contexts    : {args.contexts}")
     print(f"decode steps: {args.steps} per run, {args.repeats} interleaved repeats")
     print(f"block size  : {args.block_size}")
-    print(f"device      : cpu (torch {torch.__version__})")
+    print(f"device      : {device} {dtype} (torch {torch.__version__})")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype).to(device)
     model.eval()
     spec = ModelKVSpec.from_config(model.config, torch.float32, "cpu")
     print(f"geometry    : {spec.num_layers} layers, {spec.num_kv_heads} kv heads, "
@@ -344,12 +354,10 @@ def main() -> int:
         "benchmark": "context_sweep",
         "phase": "A",
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "platform": {
-            "system": platform.system(),
-            "python": platform.python_version(),
-            "torch": torch.__version__,
-            "device": "cpu",
-        },
+        "platform": describe_device(device, dtype),
+        # None on CPU, not 0.0: torch has no CPU allocator to query, and a zero
+        # would read as "measured, and it was nothing".
+        "peak_memory_mb": peak_memory_mb(device),
         "config": {
             "model": args.model,
             "contexts": args.contexts,

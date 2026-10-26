@@ -390,7 +390,6 @@ def report(stats: Stats, before: Dict[str, int], after: Dict[str, int],
 async def run(args: argparse.Namespace) -> int:
     base_url = args.url.rstrip("/")
     ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://") + "/ws/stream"
-    rng = random.Random(args.seed)
 
     async with httpx.AsyncClient() as client:
         try:

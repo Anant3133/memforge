@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 console = Console()
 
 def run_continuous_batching_simulation(num_requests: int = 50):
-    console.print(f"[bold cyan]Running Continuous Batching vs Static Batching Simulation[/bold cyan]")
+    console.print("[bold cyan]Running Continuous Batching vs Static Batching Simulation[/bold cyan]")
 
     random.seed(42)
     # Generate requests with variable prompt and generation lengths
