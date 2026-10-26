@@ -231,3 +231,56 @@ def test_describe_exposes_the_engine_configuration(tiny_model, stub_tokenizer):
     assert described["engine"] == "C++ native (memforge_c)"
     assert described["kv_pool"]["block_size"] == 4
     assert described["kv_pool"]["num_layers"] == tiny_model.config.num_hidden_layers
+
+
+def test_block_attention_actually_runs_under_batched_decode(tiny_model, stub_tokenizer):
+    """
+    `block_attention=True` must use the kernel, and must not change the output.
+
+    This is a regression test for a bug that survived every other test in the
+    suite. With batched decode on -- the default whenever more than one
+    sequence is decoding -- the engine reported `block_attention_enabled: true`,
+    called the block-wise kernel **zero** times, and produced different tokens
+    from the baseline. `attention_backend.enable_on()` had rerouted the model's
+    attention permanently while the batched path opened no binding, so every
+    layer fell through to the backend's eager implementation instead of the
+    model's own. Not even the fallback counter noticed, because that counter
+    lives inside the binding that was never created.
+
+    The two assertions are both necessary. Output equality alone passes while
+    the feature does nothing at all (the eager fallback is still *correct*
+    attention, just not the model's); a non-zero kernel count alone passes
+    while the kernel computes the wrong thing.
+    """
+    prompts = ["alpha prompt", "a much longer beta prompt here", "gamma"]
+
+    baseline = make_engine(tiny_model, stub_tokenizer)
+    blockwise = make_engine(tiny_model, stub_tokenizer, block_attention=True)
+    assert blockwise.block_attention, "the backend did not install; test is vacuous"
+
+    want = [r["token_ids"] for r in baseline.generate(prompts, GREEDY)]
+    got = [r["token_ids"] for r in blockwise.generate(prompts, GREEDY)]
+
+    telemetry = blockwise.telemetry()
+    assert telemetry["blockwise_layer_calls"] > 0, (
+        "block attention is enabled but the kernel never ran"
+    )
+    assert got == want, "block attention changed the output"
+
+
+def test_block_attention_does_not_reroute_the_model_permanently(
+    tiny_model, stub_tokenizer
+):
+    """
+    The model's attention implementation must be restored after each pass.
+    Leaving it rerouted sends unrelated passes through the backend with nothing
+    bound -- which is exactly how the bug above went unnoticed, and it leaks
+    across every engine sharing the model.
+    """
+    before = tiny_model.config._attn_implementation
+    engine = make_engine(tiny_model, stub_tokenizer, block_attention=True)
+    engine.generate(["alpha prompt", "beta prompt here"], GREEDY)
+    assert engine.telemetry()["blockwise_layer_calls"] > 0
+    assert tiny_model.config._attn_implementation == before, (
+        f"model left rerouted to {tiny_model.config._attn_implementation}"
+    )

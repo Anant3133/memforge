@@ -227,7 +227,14 @@ class ContinuousBatchingEngine:
         # engine, and registration can fail on a transformers without the
         # attention registry -- in which case the flag is reported as off
         # rather than silently doing nothing.
-        self.block_attention = bool(block_attention) and attention_backend.enable_on(model)
+        # `register()`, not `enable_on()`: the model's attention is rerouted
+        # only for the duration of a pass that has a binding. Rerouting it
+        # permanently sends every other pass through the backend with nothing
+        # bound, where it silently falls back to the backend's own eager
+        # attention instead of the model's -- which is how block attention
+        # came to run zero kernels under batched decode while reporting
+        # itself enabled, and how it leaked into every engine sharing a model.
+        self.block_attention = bool(block_attention) and attention_backend.register()
         if block_attention and not self.block_attention:
             LOGGER.warning(
                 "block attention unavailable on this transformers version; "
@@ -637,6 +644,72 @@ class ContinuousBatchingEngine:
         token_id = sample_logits(out.logits[0, -1], rt.params, rt.generator)
         return self._accept_token(rt, token_id, source="target")
 
+    def _run_decode_blockwise(self, rts: List[SequenceRuntime]) -> List[TokenEvent]:
+        """
+        Batched decode with attention computed block by block out of the pool.
+
+        One packed pass over one query token per sequence, using the same varlen
+        kernel Phase C built for prefill/decode fusion -- in its block-wise
+        form, so working memory stays `O(block_size)` instead of growing with
+        the longest context in the batch. That bound is the whole point of the
+        feature; the materialised variant is faster and would defeat it.
+
+        Expect this to be *slower* than the ordinary batched path on CPU, for
+        the reason documented in `block_attention.py`: iterating blocks in
+        Python costs more than one vectorised gather. It is the shape that pays
+        off where the per-block work can hide the overhead.
+        """
+        block_tables = [
+            PagedKVPool.block_table_tensor(list(rt.cache.block_table), self.device)
+            for rt in rts
+        ]
+        seq_ids = list(range(len(rts)))
+        positions = [rt.cache.position for rt in rts]
+        token_ids = [rt.tokens[-1] for rt in rts]
+
+        cache = VarlenPackedCache(
+            self.pool, self.spec.num_layers, block_tables, seq_ids, positions
+        )
+        input_ids = torch.tensor([token_ids], dtype=torch.long, device=self.device)
+        position_ids = torch.tensor([positions], dtype=torch.long, device=self.device)
+
+        # Scoped, not permanent: leaving the model rerouted would send every
+        # other pass through the backend with nothing bound, which is precisely
+        # the defect this method was written to fix.
+        with attention_backend.backend_enabled_on(self.model) as routed:
+            if not routed:
+                raise RuntimeError(
+                    "block attention needs the attention registry, which is "
+                    "unavailable; it should have been reported as off"
+                )
+            with attention_backend.varlen_attention_context(
+                self.pool, block_tables, seq_ids, positions, block_wise=True
+            ) as bound:
+                with torch.no_grad():
+                    out = self.model(
+                        input_ids=input_ids,
+                        position_ids=position_ids,
+                        past_key_values=cache,
+                        use_cache=True,
+                    )
+        if bound.used != self.spec.num_layers:
+            raise RuntimeError(
+                f"block-wise decode: {bound.used} of {self.spec.num_layers} "
+                f"layers used the kernel"
+            )
+        self.total_forward_passes += 1
+        self.total_blockwise_layers += bound.used
+
+        events: List[TokenEvent] = []
+        for row, rt in enumerate(rts):
+            for layer in rt.cache.layers:
+                layer.position += 1
+            token_id = sample_logits(out.logits[0, row], rt.params, rt.generator)
+            ev = self._accept_token(rt, token_id, source="target")
+            if ev is not None:
+                events.append(ev)
+        return events
+
     # ------------------------------------------------------------ fused step
 
     def _can_fuse(self, prefill_infos, decode_infos) -> bool:
@@ -918,11 +991,14 @@ class ContinuousBatchingEngine:
                 # the duration of the pass. Counters let telemetry show whether
                 # the kernel was actually taken -- a silent fallback would look
                 # exactly like success.
-                with attention_backend.paged_attention_context(self.pool, rt.cache) as bound:
-                    with torch.no_grad():
-                        out = self.model(
-                            input_ids=ids, past_key_values=rt.cache, use_cache=True
-                        )
+                with attention_backend.backend_enabled_on(self.model):
+                    with attention_backend.paged_attention_context(
+                        self.pool, rt.cache
+                    ) as bound:
+                        with torch.no_grad():
+                            out = self.model(
+                                input_ids=ids, past_key_values=rt.cache, use_cache=True
+                            )
                 self.total_blockwise_layers += bound.used
                 self.total_blockwise_fallbacks += bound.fallbacks
             else:
@@ -961,6 +1037,21 @@ class ContinuousBatchingEngine:
         if len(rts) == 1:
             # The write step already ran above, so it must not run again.
             return self._run_decode_sequential(infos, prepared=True)
+
+        if self.block_attention:
+            # Block-wise attention cannot be served by the left-padded gather
+            # below: that gather materialises every sequence's whole context,
+            # which is the exact cost this feature exists to avoid. A batched
+            # decode is a packed varlen pass with one query token per sequence,
+            # so it goes through that path instead.
+            #
+            # This branch is what makes the feature real under the default
+            # configuration. Before it existed the batched path opened no
+            # binding at all, so every layer fell through to the backend's
+            # eager attention -- the kernel ran zero times while telemetry
+            # reported the feature on, and the output quietly differed from
+            # the baseline.
+            return self._run_decode_blockwise(rts)
 
         ctx_lens = [rt.cache.position for rt in rts]
         batch = len(rts)
