@@ -81,13 +81,25 @@ def make_prompt_ids(tokenizer, num_tokens: int) -> List[int]:
     return ids[:num_tokens]
 
 
+def _model_device(model) -> torch.device:
+    """
+    Where this model's weights live.
+
+    Read from the model rather than passed in: an input tensor built on the
+    wrong device is a hard error on GPU ("index is on cpu, different from other
+    tensors on cuda:0"), and taking it from the weights makes that impossible
+    to get wrong at a call site.
+    """
+    return next(model.parameters()).device
+
+
 # ------------------------------------------------------- single-sequence paths
 
 @torch.no_grad()
 def decode_contiguous(model, prompt_ids: List[int], steps: int) -> Dict[str, Any]:
     """Stock Hugging Face `DynamicCache`: the baseline paging is judged against."""
     cache = DynamicCache()
-    ids = torch.tensor([prompt_ids], dtype=torch.long)
+    ids = torch.tensor([prompt_ids], dtype=torch.long, device=_model_device(model))
 
     t_prefill = time.perf_counter()
     out = model(input_ids=ids, past_key_values=cache, use_cache=True)
@@ -99,7 +111,9 @@ def decode_contiguous(model, prompt_ids: List[int], steps: int) -> Dict[str, Any
         token = int(out.logits[0, -1].argmax())
         tokens.append(token)
         out = model(
-            input_ids=torch.tensor([[token]], dtype=torch.long),
+            input_ids=torch.tensor(
+                [[token]], dtype=torch.long, device=_model_device(model)
+            ),
             past_key_values=cache,
             use_cache=True,
         )
@@ -132,7 +146,7 @@ def decode_paged(model, spec: ModelKVSpec, prompt_ids: List[int], steps: int,
         view_capacity=capacity_for(len(prompt_ids), steps) if view_cache else None,
     )
 
-    ids = torch.tensor([prompt_ids], dtype=torch.long)
+    ids = torch.tensor([prompt_ids], dtype=torch.long, device=_model_device(model))
     t_prefill = time.perf_counter()
     out = model(input_ids=ids, past_key_values=cache, use_cache=True)
     prefill_s = time.perf_counter() - t_prefill
@@ -144,7 +158,9 @@ def decode_paged(model, spec: ModelKVSpec, prompt_ids: List[int], steps: int,
         tokens.append(token)
         cache.begin_step()
         out = model(
-            input_ids=torch.tensor([[token]], dtype=torch.long),
+            input_ids=torch.tensor(
+                [[token]], dtype=torch.long, device=_model_device(model)
+            ),
             past_key_values=cache,
             use_cache=True,
         )
@@ -233,7 +249,11 @@ def main() -> int:
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     model = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype).to(device)
     model.eval()
-    spec = ModelKVSpec.from_config(model.config, torch.float32, "cpu")
+    # Must match where the model actually is, and in the same dtype. A pool on
+    # the wrong device fails deep inside the scatter with "source is on cuda:0,
+    # different from other tensors on cpu" -- the hardcoded (float32, cpu) here
+    # was invisible until a GPU run existed to expose it.
+    spec = ModelKVSpec.from_config(model.config, dtype, device)
     print(f"geometry    : {spec.num_layers} layers, {spec.num_kv_heads} kv heads, "
           f"head_dim {spec.head_dim}, {spec.bytes_per_token} bytes/token")
 

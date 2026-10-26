@@ -275,17 +275,45 @@ def main() -> int:
     )
     speedups = [r["speedup"] for r in rows if r["speedup"]]
     if speedups:
-        verdict_lines.append(
-            f"Wall-clock speedup on this CPU: "
-            f"{min(speedups):.2f}x-{max(speedups):.2f}x. Values below 1.0 are "
-            f"expected and are not a defect of the composition: a 360M target "
-            f"and a 135M draft are too close in cost for speculation to pay, "
-            f"and the draft's K passes are serial. The 2-3x claim in the plan "
-            f"is a GPU claim about a pair with a real cost gap, and this "
-            f"installed torch is the CPU-only wheel ({torch.__version__}), so "
-            f"no GPU is reachable from here and the claim is neither confirmed "
-            f"nor refuted."
+        on_gpu = device.startswith("cuda")
+        where = (
+            f"{torch.cuda.get_device_name(0)}" if on_gpu else "this CPU"
         )
+        verdict_lines.append(
+            f"Wall-clock speedup on {where}: "
+            f"{min(speedups):.2f}x-{max(speedups):.2f}x."
+        )
+        verdict_lines.append(
+            f"Values below 1.0 are not a defect of the composition. The draft "
+            f"runs K passes serially per sequence per round, and this model "
+            f"pair ({args.model} against "
+            f"{'itself' if args.self_draft else args.draft_model}) is too "
+            f"close in cost for that to pay."
+        )
+        if on_gpu:
+            # Worth stating explicitly, because the naive expectation is that
+            # a GPU helps speculation. It does the opposite for a small pair.
+            verdict_lines.append(
+                "Note that this is *worse* on GPU than on CPU, which is the "
+                "expected direction: a single target pass on a GPU is "
+                "latency-bound rather than compute-bound, so it is already "
+                "cheap, and the draft's serial passes dominate a larger share "
+                "of the round. Speculation needs the target pass to be "
+                "genuinely expensive before skipping some of them pays -- that "
+                "means a much larger target, not merely a faster device."
+            )
+            verdict_lines.append(
+                f"So the plan's 2-3x claim is still neither confirmed nor "
+                f"refuted: it is about an 8B-class target, and this GPU has "
+                f"{torch.cuda.mem_get_info()[1] / 1024**3:.1f} GB of VRAM, "
+                f"which will not hold one in fp16."
+            )
+        else:
+            verdict_lines.append(
+                "The plan's 2-3x claim is a GPU claim about a pair with a real "
+                "cost gap, so it is neither confirmed nor refuted here. Re-run "
+                "with --device cuda to measure it on a GPU."
+            )
     for line in verdict_lines:
         print(f"  - {line}")
 
