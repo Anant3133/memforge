@@ -228,6 +228,22 @@ MEMFORGE_VIEW_CACHE_BUDGET_MB=512 \
 # exists because it is the structure a GPU kernel takes.
 MEMFORGE_BLOCK_ATTENTION=true \
   uvicorn server.app:app --port 8000
+
+# FAIREST LATENCY UNDER MIXED TRAFFIC — a long prompt is prefilled a budget of
+# tokens at a time instead of monopolising one step. Cuts the worst stall a
+# 2,000-token arrival inflicts on an in-flight request from 15.96x to 2.54x.
+MEMFORGE_MAX_PREFILL_TOKENS_PER_STEP=256 \
+  uvicorn server.app:app --port 8000
+
+# SPECULATION INSIDE THE BATCH (Phase D) — one target pass verifies every
+# sequence's K+1 candidates at once. Lossless, and OFF by default because it is
+# measured 0.62x–0.77x (slower) on this CPU: the draft's K serial passes cost
+# more than the target passes they save when target and draft are close in
+# size. Turn it on where the target is much more expensive than the draft.
+# Needs the draft model, so not compatible with MEMFORGE_LOAD_DRAFT=false.
+MEMFORGE_BATCHED_SPECULATION=true \
+MEMFORGE_LOOKAHEAD_K=4 \
+  uvicorn server.app:app --port 8000
 ```
 
 **Environment variables are read at import time.** Setting one after the server

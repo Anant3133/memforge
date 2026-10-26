@@ -6,11 +6,13 @@ namespace memforge {
 
 Scheduler::Scheduler(std::shared_ptr<BlockAllocator> allocator, size_t max_num_seqs,
                      std::shared_ptr<PrefixCache> prefix_cache,
-                     size_t max_prefill_tokens_per_step)
+                     size_t max_prefill_tokens_per_step,
+                     size_t lookahead_slots)
     : allocator_(std::move(allocator))
     , prefix_cache_(std::move(prefix_cache))
     , max_num_seqs_(max_num_seqs)
-    , max_prefill_tokens_per_step_(max_prefill_tokens_per_step) {
+    , max_prefill_tokens_per_step_(max_prefill_tokens_per_step)
+    , lookahead_slots_(lookahead_slots) {
 }
 
 void Scheduler::release_sequence_blocks(Sequence& seq) {
@@ -49,8 +51,14 @@ SchedulerStepResult Scheduler::step() {
             continue;
         }
 
-        // Ensure sequence has enough capacity for next token
-        if (!allocator_->ensure_capacity(*seq)) {
+        // Ensure the sequence has room for what this step will write: one
+        // token for plain decoding, or K+1 candidates under speculation,
+        // since a rejected candidate still had to be written to be rejected.
+        const bool has_room =
+            lookahead_slots_ > 0
+                ? allocator_->ensure_capacity_with_lookahead(*seq, lookahead_slots_)
+                : allocator_->ensure_capacity(*seq);
+        if (!has_room) {
             // Memory pressure: preempt by recomputation. Release the physical
             // blocks back to the pool so shorter sequences can make progress,
             // and re-queue at the head so this sequence is admitted first once

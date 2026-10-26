@@ -33,6 +33,16 @@ public:
     void set_block(size_t logical_index, BlockId physical_block_id);
     void clear_blocks();
     size_t get_num_required_blocks() const;
+    /**
+     * @brief Blocks needed to hold the sequence plus `lookahead` more tokens.
+     *
+     * Speculative decoding writes K draft tokens and one bonus token before
+     * knowing how many will survive verification, so the blocks for all of
+     * them have to exist up front. Rejected tokens are not freed -- the cache
+     * cursor simply moves back and the next step overwrites them -- so this
+     * is a reservation, not a leak.
+     */
+    size_t get_num_required_blocks_with_lookahead(size_t lookahead) const;
     size_t get_num_allocated_blocks() const { return block_table_.size(); }
 
     // Token management

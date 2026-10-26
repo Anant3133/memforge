@@ -109,6 +109,31 @@ class EngineManager:
         ).to(device)
         self.target_model.eval()
 
+        # The draft model is loaded before the continuous engine rather than
+        # after it, because with batched speculation enabled the engine needs it
+        # at construction time. A failure here is not fatal: speculation is an
+        # optimisation, so the engine is still built without it.
+        if cfg.load_draft_model:
+            try:
+                LOGGER.info("loading draft model", extra={"model": cfg.draft_model})
+                self.draft_model = AutoModelForCausalLM.from_pretrained(
+                    cfg.draft_model, dtype=dtype
+                ).to(device)
+                self.draft_model.eval()
+            except Exception as exc:  # draft model is optional
+                LOGGER.warning(
+                    "draft model unavailable, speculation disabled",
+                    extra={"error": f"{type(exc).__name__}: {exc}"},
+                )
+                self.draft_model = None
+
+        speculate_in_batch = bool(cfg.batched_speculation) and self.draft_model is not None
+        if cfg.batched_speculation and self.draft_model is None:
+            LOGGER.warning(
+                "batched speculation requested but no draft model is loaded; "
+                "continuing without it"
+            )
+
         self.engine = ContinuousBatchingEngine(
             self.target_model,
             self.tokenizer,
@@ -121,6 +146,8 @@ class EngineManager:
             view_cache_budget_mb=cfg.view_cache_budget_mb,
             block_attention=cfg.block_attention,
             max_prefill_tokens_per_step=cfg.max_prefill_tokens_per_step,
+            draft_model=self.draft_model if speculate_in_batch else None,
+            lookahead_k=cfg.lookahead_k if speculate_in_batch else 0,
         )
         pool = self.engine.pool.describe()
         LOGGER.info(
@@ -131,16 +158,17 @@ class EngineManager:
                 "block_size": pool["block_size"],
                 "capacity_tokens": pool["capacity_tokens"],
                 "device": pool["device"],
+                "batched_speculation": self.engine.speculation_enabled,
+                "lookahead_k": self.engine.lookahead_k,
             },
         )
 
-        if cfg.load_draft_model:
+        # The standalone single-sequence speculative engine, still served on its
+        # own endpoint. It is separate from the engine above on purpose: this one
+        # is one sequence at a time behind a lock, which is what Phase D's
+        # batched path replaces rather than extends.
+        if self.draft_model is not None:
             try:
-                LOGGER.info("loading draft model", extra={"model": cfg.draft_model})
-                self.draft_model = AutoModelForCausalLM.from_pretrained(
-                    cfg.draft_model, dtype=dtype
-                ).to(device)
-                self.draft_model.eval()
                 self.spec_engine = PagedSpeculativeEngine(
                     self.target_model,
                     self.tokenizer,
@@ -152,12 +180,11 @@ class EngineManager:
                     max_model_len=cfg.max_model_len,
                 )
                 LOGGER.info("speculative engine ready")
-            except Exception as exc:  # draft model is optional
+            except Exception as exc:  # the standalone path is optional
                 LOGGER.warning(
-                    "draft model unavailable, speculation disabled",
+                    "standalone speculative engine unavailable",
                     extra={"error": f"{type(exc).__name__}: {exc}"},
                 )
-                self.draft_model = None
                 self.spec_engine = None
 
     async def start(self) -> None:

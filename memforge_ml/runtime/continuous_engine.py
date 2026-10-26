@@ -30,6 +30,13 @@ from transformers.cache_utils import DynamicCache
 
 from memforge_ml.kernels import attention_backend
 from memforge_ml.kernels.batched_decode import BatchedDecodeBuffers, assemble_batch
+from memforge_ml.runtime.batched_speculative import (
+    DraftState,
+    propose_draft_tokens,
+    resolve_round,
+    scatter_accepted_kv,
+    verify_candidates_batched,
+)
 from memforge_ml.runtime.decode_view_cache import capacity_for
 from memforge_ml.runtime.kv_pool import ModelKVSpec, PagedKVPool
 from memforge_ml.runtime.paged_cache import PagedCache
@@ -80,6 +87,11 @@ class SequenceRuntime:
     decoded_chars: int = 0
     #: Bytes of decode-mirror budget this sequence holds, 0 if it has none.
     view_cache_bytes: int = 0
+    #: Draft-model cache, created on this sequence's first speculative step.
+    draft: Optional[DraftState] = None
+    #: Draft tokens proposed for this sequence, and how many were accepted.
+    num_draft_proposed: int = 0
+    num_draft_accepted: int = 0
 
     @property
     def done(self) -> bool:
@@ -129,6 +141,8 @@ class ContinuousBatchingEngine:
         view_cache_budget_mb: float = 512.0,
         block_attention: bool = False,
         max_prefill_tokens_per_step: int = 0,
+        draft_model=None,
+        lookahead_k: int = 0,
     ):
         if not HAS_CPP_ENGINE:
             raise RuntimeError(
@@ -179,11 +193,22 @@ class ContinuousBatchingEngine:
         # Chunked prefill (Phase C). 0 means unlimited, i.e. a prompt is
         # prefilled in one step -- the original behaviour.
         self.max_prefill_tokens_per_step = max(0, int(max_prefill_tokens_per_step))
+
+        # Speculative decoding (Phase D). Off unless a draft model and a
+        # positive lookahead are both given, because speculation with no draft
+        # is just decoding with extra bookkeeping.
+        self.draft_model = draft_model
+        self.lookahead_k = max(0, int(lookahead_k)) if draft_model is not None else 0
+        # K draft tokens plus the bonus token all have to have somewhere to be
+        # written before verification can reject any of them, so the scheduler
+        # reserves K+1 slots per running sequence per step rather than 1.
+        lookahead_slots = self.lookahead_k + 1 if self.lookahead_k > 0 else 0
         self.scheduler = memforge_c.Scheduler(
             self.allocator,
             max_num_seqs,
             self.prefix_cache,
             self.max_prefill_tokens_per_step,
+            lookahead_slots,
         )
 
         # Tier 3 has to be installed on the model, not just enabled on the
@@ -213,6 +238,14 @@ class ContinuousBatchingEngine:
         self.total_cached_prefix_tokens = 0   # prefill tokens skipped via a hit
         self.total_cow_copies = 0
         self.total_prefill_chunks = 0
+        self.total_draft_tokens_proposed = 0
+        self.total_draft_tokens_accepted = 0
+        self.total_speculative_rounds = 0
+        # Sum of batch sizes over rounds. Divided by the round count this is
+        # the average number of sequences each single target pass verified --
+        # the figure that says whether speculation and batching composed, or
+        # merely coexisted.
+        self.total_speculative_sequence_rounds = 0
         self.engine_started_at = time.perf_counter()
 
         # Aborts arrive from whatever thread the server's event loop runs on,
@@ -434,7 +467,9 @@ class ContinuousBatchingEngine:
                 events.append(ev)
 
         if decode_infos:
-            if self.batched_decode and len(decode_infos) > 1:
+            if self.speculation_enabled:
+                events.extend(self._run_decode_speculative(decode_infos))
+            elif self.batched_decode and len(decode_infos) > 1:
                 events.extend(self._run_decode_batched(decode_infos))
             else:
                 events.extend(self._run_decode_sequential(decode_infos))
@@ -595,13 +630,26 @@ class ContinuousBatchingEngine:
 
     # ----------------------------------------------------------------- decode
 
-    def _run_decode_sequential(self, infos) -> List[TokenEvent]:
+    def _decode_prepared(self, infos) -> List[TokenEvent]:
+        """
+        Ordinary decode for sequences whose `_begin_write_step` has already run.
+
+        Only the speculative path needs this: it decides per sequence whether to
+        speculate, and the ones that cannot must not have their cache rebound a
+        second time in the same step.
+        """
+        if self.batched_decode and len(infos) > 1:
+            return self._run_decode_batched(infos, prepared=True)
+        return self._run_decode_sequential(infos, prepared=True)
+
+    def _run_decode_sequential(self, infos, prepared: bool = False) -> List[TokenEvent]:
         events: List[TokenEvent] = []
         for info in infos:
             rt = self.runtimes.get(info.seq_id)
             if rt is None or rt.done or rt.cache is None:
                 continue
-            self._begin_write_step(rt, info)
+            if not prepared:
+                self._begin_write_step(rt, info)
             ids = torch.tensor([[rt.tokens[-1]]], dtype=torch.long, device=self.device)
             if self.block_attention:
                 # The backend has no reference to the cache from its own
@@ -628,7 +676,7 @@ class ContinuousBatchingEngine:
                 events.append(ev)
         return events
 
-    def _run_decode_batched(self, infos) -> List[TokenEvent]:
+    def _run_decode_batched(self, infos, prepared: bool = False) -> List[TokenEvent]:
         """
         One forward pass for every decoding sequence.
 
@@ -643,13 +691,15 @@ class ContinuousBatchingEngine:
             rt = self.runtimes.get(info.seq_id)
             if rt is None or rt.done or rt.cache is None:
                 continue
-            self._begin_write_step(rt, info)
+            if not prepared:
+                self._begin_write_step(rt, info)
             rts.append(rt)
 
         if not rts:
             return []
         if len(rts) == 1:
-            return self._run_decode_sequential(infos)
+            # The write step already ran above, so it must not run again.
+            return self._run_decode_sequential(infos, prepared=True)
 
         ctx_lens = [rt.cache.position for rt in rts]
         batch = len(rts)
@@ -710,6 +760,140 @@ class ContinuousBatchingEngine:
             ev = self._accept_token(rt, token_id, source="target")
             if ev is not None:
                 events.append(ev)
+        return events
+
+    # ----------------------------------------------------- speculative decode
+
+    @property
+    def speculation_enabled(self) -> bool:
+        return self.draft_model is not None and self.lookahead_k > 0
+
+    def _speculation_headroom(self, rt: SequenceRuntime) -> bool:
+        """
+        Whether this sequence can safely take K+1 more tokens this step.
+
+        A sequence near `max_model_len` or near its own `max_new_tokens` would
+        need a shorter candidate run, and the batched verification requires a
+        uniform width. Rather than pad rows to different real lengths -- which
+        is the varlen problem -- such a sequence sits out this step and decodes
+        one token the ordinary way.
+        """
+        span = self.lookahead_k + 1
+        if rt.cache.position + span > self.max_model_len:
+            return False
+        return len(rt.generated) + span <= rt.params.max_new_tokens
+
+    def _run_decode_speculative(self, infos) -> List[TokenEvent]:
+        """
+        One speculative round across every decoding sequence.
+
+        The draft runs per sequence (K cheap passes each), then a *single*
+        target pass verifies all of their candidate runs at once. That batched
+        verification is what makes speculation and continuous batching compose:
+        the naive composition costs one target pass per sequence per round,
+        which is strictly worse than not speculating at all.
+
+        Sequences without room for a full K+1 run fall back to ordinary decode
+        in the same step, so one nearly-finished sequence does not disable
+        speculation for the rest of the batch.
+        """
+        candidates_rts: List[SequenceRuntime] = []
+        plain_infos = []
+        for info in infos:
+            rt = self.runtimes.get(info.seq_id)
+            if rt is None or rt.done or rt.cache is None:
+                continue
+            self._begin_write_step(rt, info)
+            if self._speculation_headroom(rt):
+                candidates_rts.append(rt)
+            else:
+                plain_infos.append(info)
+
+        events: List[TokenEvent] = []
+        # `_begin_write_step` has already run for these, and running it twice in
+        # a step is not idempotent, so the fallback path is given the infos
+        # directly rather than re-entering the normal decode entry points.
+        if plain_infos:
+            events.extend(self._decode_prepared(plain_infos))
+        if not candidates_rts:
+            return events
+
+        k = self.lookahead_k
+        # ---------------------------------------------------- 1. propose
+        proposals: List[List[int]] = []
+        draft_probs: List[List[torch.Tensor]] = []
+        token_counts: List[int] = []
+        for rt in candidates_rts:
+            if rt.draft is None:
+                rt.draft = DraftState()
+            token_counts.append(len(rt.tokens))
+            cand, probs = propose_draft_tokens(
+                self.draft_model, rt.draft, rt.tokens, k,
+                rt.params.temperature, self.device,
+            )
+            proposals.append(cand)
+            draft_probs.append(probs)
+
+        # ---------------------------------------------- 2. verify, batched
+        ctx_lens = [rt.cache.position for rt in candidates_rts]
+        block_tables = [rt.cache.block_table_tensor_cached() for rt in candidates_rts]
+        queries = [
+            [rt.tokens[-1]] + cand
+            for rt, cand in zip(candidates_rts, proposals)
+        ]
+        logits, new_kv, _ = verify_candidates_batched(
+            self.model, self.pool, self.decode_buffers,
+            block_tables, ctx_lens, queries, self.device,
+        )
+        self.total_forward_passes += 1
+        self.total_speculative_rounds += 1
+        self.total_speculative_sequence_rounds += len(candidates_rts)
+
+        # ------------------------------------------------------ 3. accept
+        for row, rt in enumerate(candidates_rts):
+            round_ = resolve_round(
+                rt.seq_id, proposals[row], draft_probs[row], logits[row],
+                rt.params.temperature,
+            )
+
+            # Emit first, so a sequence that stops on EOS part-way through the
+            # run does not get the rest of the run written into its cache.
+            confirmed = 0
+            for position, token_id in enumerate(round_.accepted):
+                source = "draft" if round_.is_draft[position] else "target"
+                ev = self._accept_token(rt, token_id, source=source)
+                confirmed += 1
+                if ev is not None:
+                    events.append(ev)
+                if rt.done:
+                    break
+
+            rt.num_draft_proposed += len(round_.candidates)
+            rt.num_draft_accepted += round_.num_accepted_draft
+            self.total_draft_tokens_proposed += len(round_.candidates)
+            self.total_draft_tokens_accepted += round_.num_accepted_draft
+
+            if rt.done:
+                # `_finish` already dropped the cache and the scheduler will
+                # free these blocks on its next step. Writing now would land in
+                # blocks about to belong to another sequence, and nothing will
+                # ever read this sequence's KV again -- so there is nothing to
+                # write and nothing to roll back.
+                continue
+
+            scatter_accepted_kv(
+                self.pool, block_tables[row], ctx_lens[row], new_kv, row, confirmed
+            )
+            for layer in rt.cache.layers:
+                layer.position += confirmed
+
+            # Discard only the rejected tail, keeping the accepted candidates'
+            # draft KV. This does not change the *number* of draft passes --
+            # the next round's catch-up is one pass either way -- only its
+            # width, since the catch-up then covers the newly confirmed tokens
+            # instead of every accepted candidate as well.
+            rt.draft.rollback_to(token_counts[row] + round_.num_accepted_draft)
+
         return events
 
     # ------------------------------------------------------------ bookkeeping
@@ -836,6 +1020,32 @@ class ContinuousBatchingEngine:
             "prefill_chunks": self.total_prefill_chunks,
             "chunked_prefill_enabled": self.max_prefill_tokens_per_step > 0,
             "max_prefill_tokens_per_step": self.max_prefill_tokens_per_step,
+            "speculation_enabled": self.speculation_enabled,
+            "lookahead_k": self.lookahead_k,
+            "speculative_rounds": self.total_speculative_rounds,
+            "speculative_sequences_per_round": (
+                round(
+                    self.total_speculative_sequence_rounds
+                    / self.total_speculative_rounds,
+                    3,
+                )
+                if self.total_speculative_rounds
+                else 0.0
+            ),
+            "draft_tokens_proposed": self.total_draft_tokens_proposed,
+            "draft_tokens_accepted": self.total_draft_tokens_accepted,
+            # The figure that decides whether speculation is worth its cost: at
+            # a low acceptance rate the draft's passes are pure overhead, which
+            # is exactly what the CPU measurements in the plan show.
+            "draft_acceptance_rate": (
+                round(
+                    self.total_draft_tokens_accepted
+                    / self.total_draft_tokens_proposed,
+                    4,
+                )
+                if self.total_draft_tokens_proposed
+                else 0.0
+            ),
             "decode_view_cache_enabled": self.decode_view_cache,
             "block_attention_enabled": self.block_attention,
             "blockwise_layer_calls": self.total_blockwise_layers,

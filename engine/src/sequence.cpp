@@ -41,6 +41,12 @@ size_t Sequence::get_num_required_blocks() const {
     return (total_tokens + block_size_ - 1) / block_size_;
 }
 
+size_t Sequence::get_num_required_blocks_with_lookahead(size_t lookahead) const {
+    const size_t total_tokens = get_total_len() + lookahead;
+    if (total_tokens == 0) return 0;
+    return (total_tokens + block_size_ - 1) / block_size_;
+}
+
 void Sequence::append_token(TokenId token) {
     output_tokens_.push_back(token);
     if (output_tokens_.size() >= max_new_tokens_) {

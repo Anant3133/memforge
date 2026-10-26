@@ -75,6 +75,16 @@ class ServerConfig(BaseModel):
     # flight keep emitting a token every step.
     max_prefill_tokens_per_step: int = _env_int("MEMFORGE_MAX_PREFILL_TOKENS_PER_STEP", 0)
 
+    # Phase D: run speculation *inside* the continuous-batching loop, so one
+    # target pass verifies every sequence's candidate run. Default off, and
+    # deliberately so: it is lossless but measured 0.62x-0.77x (slower) on
+    # CPU with the 360M/135M pair, because the draft's K serial passes cost
+    # more than the target passes they save when the two models are close in
+    # size. Worth enabling where the target is much more expensive than the
+    # draft -- see Phase D in PROGRESS_AND_NEXT_PHASES.md. Requires
+    # MEMFORGE_LOAD_DRAFT.
+    batched_speculation: bool = _env_bool("MEMFORGE_BATCHED_SPECULATION", False)
+
     # Toggles. Loading the draft model costs extra memory, so it is opt-out.
     load_draft_model: bool = _env_bool("MEMFORGE_LOAD_DRAFT", True)
     eager_load: bool = _env_bool("MEMFORGE_EAGER_LOAD", True)

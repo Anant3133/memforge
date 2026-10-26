@@ -35,9 +35,18 @@ public:
      *        Decode is never charged against this budget: a running sequence
      *        emits its token every step regardless, which is the whole point.
      */
+    /**
+     * @param lookahead_slots Candidate tokens to reserve per running sequence
+     *        each step (Phase D). 0 keeps the one-token-per-step reservation
+     *        that plain decoding needs. Set to K+1 for speculative decoding
+     *        with lookahead K: the draft's K tokens plus the bonus token all
+     *        need somewhere to be written before verification can reject any
+     *        of them.
+     */
     Scheduler(std::shared_ptr<BlockAllocator> allocator, size_t max_num_seqs = 256,
               std::shared_ptr<PrefixCache> prefix_cache = nullptr,
-              size_t max_prefill_tokens_per_step = 0);
+              size_t max_prefill_tokens_per_step = 0,
+              size_t lookahead_slots = 0);
     ~Scheduler() = default;
 
     /**
@@ -73,6 +82,8 @@ public:
     size_t get_max_prefill_tokens_per_step() const { return max_prefill_tokens_per_step_; }
     void set_max_prefill_tokens_per_step(size_t n) { max_prefill_tokens_per_step_ = n; }
     bool chunked_prefill_enabled() const { return max_prefill_tokens_per_step_ > 0; }
+    size_t get_lookahead_slots() const { return lookahead_slots_; }
+    void set_lookahead_slots(size_t n) { lookahead_slots_ = n; }
 
 private:
     /**
@@ -88,6 +99,7 @@ private:
     std::shared_ptr<PrefixCache> prefix_cache_;  // null => sharing disabled
     size_t max_num_seqs_;
     size_t max_prefill_tokens_per_step_{0};  // 0 => unlimited
+    size_t lookahead_slots_{0};              // 0 => reserve one token per step
 
     std::deque<SequencePtr> waiting_queue_;
     std::vector<SequencePtr> running_queue_;

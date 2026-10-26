@@ -304,10 +304,26 @@ These are deliberate scope boundaries, not unknowns:
    into one preallocated buffer, removing the `F.pad` and `torch.cat` copies
    — 640 MB per step at batch 8 / context 2048. See section 11.
 3. **Prefill is one sequence at a time.** Multiple simultaneous arrivals prefill
-   sequentially. There is no chunked prefill, so a long prompt occupies a step.
-4. **Speculative decoding is single-sequence**, serialized behind a lock, and not
-   integrated with the continuous-batching scheduler. The two optimizations cannot
-   currently be used together.
+   sequentially. ~~There is no chunked prefill, so a long prompt occupies a
+   step.~~ **Chunked prefill resolved 2026-10-26 (Phase C bullet 1):** a long
+   prompt is now spread over steps under a per-step token budget, cutting the
+   worst-case stall it inflicts on an in-flight request from 15.96x to 2.54x.
+   The remaining 2.5x floor is the *other* half of the limitation: a step
+   carrying a prefill chunk still runs a second forward pass for decode rather
+   than fusing them, which needs varlen paged attention. Prefill itself is also
+   still one sequence per step.
+4. ~~**Speculative decoding is single-sequence**, serialized behind a lock, and
+   not integrated with the continuous-batching scheduler.~~ **Resolved
+   2026-10-26 (Phase D).** `ContinuousBatchingEngine(draft_model=...,
+   lookahead_k=K)` runs speculation inside the batching loop: the C++ scheduler
+   reserves K+1 candidate slots per sequence per step, and one target forward
+   pass verifies every sequence's whole candidate run at once (measured: 3
+   sequences per pass at batch 4, where a per-sequence verifier would need 3
+   passes). Output is token-identical to non-speculative generation.
+   **Composing them is not the same as them being worth using together here:**
+   on this CPU, with the only model pair that fits, speculation measures
+   0.62x-0.77x — slower. See Phase D for why, and why that is a hardware
+   conclusion rather than a design one.
 5. ~~**No prefix sharing.**~~ **Resolved 2026-10-24 (Phase B).** Sequences with a
    common prompt prefix now point at the same physical blocks. See section 10.
 6. **CPU only.** No CUDA device has been exercised; `fp16`/device placement paths
@@ -370,24 +386,101 @@ Implemented. Measured results and design notes in section 10 below.
   telemetry keys are served; the visualizer component itself is Track 4's
   deliverable.
 
-### Phase C — Chunked prefill and prefill/decode fusion
+### Phase C — Chunked prefill and prefill/decode fusion ⚠️ **BULLET 1 DONE 2026-10-26**
 
-- Split long prompts into block-sized chunks across steps so one long prompt
-  cannot stall decoding for everyone (fixes limitations 1 and 3 of the scheduler).
-- Mix prefill chunks and decode tokens in a single batched pass.
+- [x] Split long prompts into block-sized chunks across steps so one long prompt
+      cannot stall decoding for everyone (fixes limitations 1 and 3 of the
+      scheduler). `Scheduler(max_prefill_tokens_per_step=N)` spends a per-step
+      token budget on prefill, carrying a prompt across steps via
+      `SequenceStepInfo::prefill_chunk_end` and
+      `PagedCache.seed_position()`. Measured: worst-case decode stall for an
+      in-flight request fell from **15.96x to 2.54x** (7.8x better) when a long
+      prompt arrives. Output is byte-identical at every budget from 64 down to
+      1, which is the property that matters -- a chunk boundary in the wrong
+      place changes the KV, not the control flow.
+- [ ] Mix prefill chunks and decode tokens in a single batched pass. **Not
+      done.** This is why the stall ratio floors at ~2.5x rather than ~1x: a
+      step that carries a prefill chunk runs *two* forward passes, one for the
+      chunk and one for decode. Fusing them needs varlen paged attention (one
+      pass over rows of different query lengths), which the current
+      uniform-width batched path cannot express.
 - **Done when:** p99 inter-token latency for an in-flight request is unaffected by
-  a 2,000-token prompt arriving, with a benchmark demonstrating it.
+  a 2,000-token prompt arriving, with a benchmark demonstrating it. **Not met:**
+  2.54x is a large improvement but it is not "unaffected", and closing the gap
+  is exactly the unimplemented second bullet.
 
-### Phase D — Speculative decoding inside continuous batching
+### Phase D — Speculative decoding inside continuous batching ⚠️ **COMPOSES 2026-10-26; DoD BLOCKED**
 
-- Teach the C++ scheduler to allocate for `K+1` candidate tokens per step.
-- Verify multiple sequences' candidate trees in one batched target pass.
-- Re-benchmark on a pair with a real cost gap (e.g. Llama-3-8B + Llama-3.2-1B) to
-  test whether the predicted 2-3x materializes where the arithmetic supports it.
-- **Done when:** speculation and batching compose, and a GPU run either confirms
-  or refutes the 2-3x claim with numbers in this document.
+- [x] Teach the C++ scheduler to allocate for `K+1` candidate tokens per step.
+      `Sequence::get_num_required_blocks_with_lookahead` and
+      `BlockAllocator::ensure_capacity_with_lookahead` reserve all-or-nothing,
+      and `Scheduler(lookahead_slots=K+1)` uses them on the decode branch. The
+      reservation is K+1 rather than K because a rejected candidate still had
+      to be written somewhere to be rejected, and the bonus token from the last
+      query position needs a slot of its own.
+- [x] Verify multiple sequences' candidate trees in one batched target pass.
+      `memforge_ml/runtime/batched_speculative.py` plus
+      `ContinuousBatchingEngine(draft_model=..., lookahead_k=K)`. One target
+      pass covers the whole batch: `(N, K+1)` query positions against N paged
+      contexts, uniform width, so it is an ordinary padded batch rather than
+      the varlen problem that blocks Phase C bullet 2. Telemetry reports
+      `speculative_sequences_per_round`, which is the number of target passes
+      saved per round versus verifying each sequence separately -- the
+      difference between speculation and batching *composing* and merely
+      coexisting.
+- [ ] Re-benchmark on a pair with a real cost gap (e.g. Llama-3-8B +
+      Llama-3.2-1B). **Blocked:** `torch.cuda.is_available()` is `False` on this
+      machine (`torch 2.13.0+cpu`), and an 8B target is not runnable on CPU.
 
-### Phase E — GPU execution
+**Measured** -- `benchmarks/run_speculative_batching.py`, SmolLM2-360M target
+with a 135M draft, K=4, 16 tokens per sequence, greedy, CPU:
+
+| batch | verify passes, batched | verify passes, per-sequence | saved | seqs/round | tokens per target pass (spec / plain) | wall-clock |
+|------:|-----------------------:|----------------------------:|------:|-----------:|--------------------------------------:|-----------:|
+| 1     | 4                      | 4                           | 0     | 1.00       | 2.67 / 1.00                           | 0.77x      |
+| 2     | 4                      | 7                           | 3     | 1.75       | 3.20 / 1.88                           | 0.68x      |
+| 4     | 5                      | 15                          | 10    | 3.00       | 4.92 / 3.37                           | 0.62x      |
+
+Output was **token-identical to non-speculative generation at every batch
+size**, on real weights, which is the precondition for any of the rest being
+worth reading.
+
+Read the table as two separate findings:
+
+* **The composition works.** At batch 4, one target pass verifies 3 sequences,
+  so verification costs 5 passes where a per-sequence verifier would cost 15.
+  Output per target pass rises from 3.37 to 4.92 tokens (1.46x). This is the
+  structural claim the phase is about, and it holds.
+* **It is still slower in wall-clock terms on this CPU, and more so at larger
+  batches** (0.77x -> 0.62x). That is not the composition failing; it is the
+  draft's cost. The draft runs K serial passes per sequence per round, so its
+  cost scales with the batch while the target saving does not. With a 360M
+  target and a 135M draft the ratio is roughly 2.7x, nowhere near enough to
+  pay for 4 extra draft passes -- and the acceptance rate of ~0.6 means a
+  rejected round wastes all of them. Speculation pays when the target is much
+  more expensive than the draft and the draft's passes are cheap relative to a
+  single target pass, which is a GPU regime with an 8B/1B pair, not this one.
+  §3.5's earlier single-sequence 0.58x is consistent with these numbers.
+**Done when:** speculation and batching compose, and a GPU run either confirms
+or refutes the 2-3x claim with numbers in this document. **Half met.** They
+compose, and that half is both tested and measured: greedy output with
+speculation on is token-identical to greedy output with it off, for a batch of
+four concurrent sequences, at every K in {1,2,3,5,8}, under full acceptance
+(self-speculation) where each round confirms K+1 tokens, and on real weights in
+the table above. The GPU half cannot be produced on this machine, so the 2-3x
+claim is left neither confirmed nor refuted rather than answered with CPU
+numbers that cannot speak to it. What the CPU numbers do establish is the
+narrower, honest conclusion: **the structural obstacle to using speculation
+with continuous batching is gone, and on this hardware speculation is still not
+worth enabling** (0.62x-0.77x). Both halves of that sentence matter.
+
+### Phase E — GPU execution 🚫 **BLOCKED: no CUDA device**
+
+Nothing in this phase is verifiable on this machine -- `torch 2.13.0+cpu`, and
+`torch.cuda.is_available()` is `False`. The code paths are written to be
+device-agnostic (`ModelKVSpec` carries dtype and device, the pool allocates on
+whatever device the model is on), but "device-agnostic by construction" is not
+evidence, and this document does not record numbers that were not measured.
 
 - Exercise CUDA: `fp16`/`bf16`, pool allocated in VRAM, real `max_memory_allocated`
   telemetry instead of the current zero on CPU.

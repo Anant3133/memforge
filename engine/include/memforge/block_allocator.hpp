@@ -71,6 +71,17 @@ public:
      */
     bool ensure_capacity(Sequence& seq);
 
+    /**
+     * @brief Like `ensure_capacity`, but reserving room for `lookahead` more tokens.
+     *
+     * Speculative decoding needs the blocks for K draft tokens plus the bonus
+     * token to exist before the draft runs, because a rejected token still
+     * had to be written somewhere to be rejected. Returns false without
+     * allocating anything if the full reservation cannot be met, so a
+     * sequence is never left half-reserved.
+     */
+    bool ensure_capacity_with_lookahead(Sequence& seq, size_t lookahead);
+
     // ------------------------------------------------------- prefix sharing
 
     /**

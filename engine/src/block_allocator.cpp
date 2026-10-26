@@ -187,6 +187,28 @@ std::vector<BlockId> BlockAllocator::free_sequence(Sequence& seq) {
     return freed;
 }
 
+bool BlockAllocator::ensure_capacity_with_lookahead(Sequence& seq, size_t lookahead) {
+    size_t needed_blocks = seq.get_num_required_blocks_with_lookahead(lookahead);
+    size_t current_blocks = seq.get_num_allocated_blocks();
+
+    if (needed_blocks <= current_blocks) {
+        return true;
+    }
+
+    size_t additional = needed_blocks - current_blocks;
+    if (!can_allocate(additional)) {
+        // All or nothing: a partially reserved sequence would run its draft
+        // and then have nowhere to put the last candidate.
+        return false;
+    }
+
+    std::vector<BlockId> new_blocks = allocate_blocks(additional);
+    for (BlockId id : new_blocks) {
+        seq.add_block(id);
+    }
+    return true;
+}
+
 bool BlockAllocator::ensure_capacity(Sequence& seq) {
     size_t needed_blocks = seq.get_num_required_blocks();
     size_t current_blocks = seq.get_num_allocated_blocks();
