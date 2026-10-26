@@ -60,3 +60,6 @@ hf_cache/
 *.safetensors
 *.bin
 *.pt
+
+# Intermediate HTML from scripts/build_runbook_pdf.py; the PDF is the artefact.
+docs/_runbook.build.html

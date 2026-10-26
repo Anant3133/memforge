@@ -23,3 +23,8 @@ psutil>=5.9.0
 matplotlib>=3.8.0
 rich>=13.7.0
 tqdm>=4.66.0
+
+# Docs: building and verifying PHASE_E_RUNBOOK.pdf
+# (scripts/build_runbook_pdf.py needs a Chromium-family browser too)
+markdown>=3.11
+pypdf>=6.0
