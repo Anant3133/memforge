@@ -81,6 +81,26 @@ export interface LiveMetrics {
 }
 
 export interface EngineTelemetry extends LiveMetrics {
+  /**
+   * Where the pool lives and what the device holds.
+   *
+   * The memory fields are `null` on CPU rather than 0, because torch has no CPU
+   * allocator to ask. Zero would read as "measured, and it was nothing", which
+   * is the kind of number that makes a dashboard untrustworthy.
+   */
+  device: string;
+  dtype: string;
+  cuda_available: boolean;
+  device_name: string | null;
+  pool_mb: number;
+  capacity_tokens: number;
+  num_blocks: number;
+  allocated_mb: number | null;
+  peak_memory_mb: number | null;
+  reserved_mb: number | null;
+  vram_total_mb: number | null;
+  vram_free_mb: number | null;
+
   uptime_s: number;
   steps: number;
   forward_passes: number;

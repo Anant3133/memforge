@@ -1,4 +1,6 @@
 import React from 'react';
+import { LearnMore } from './LearnMore';
+import { MEMORY_MAP } from './explanations';
 import { Database } from 'lucide-react';
 
 interface MemoryVisualizerProps {
@@ -114,6 +116,7 @@ export const MemoryVisualizer: React.FC<MemoryVisualizerProps> = ({
           />
         ))}
       </div>
+      <LearnMore {...MEMORY_MAP} />
     </div>
   );
 };

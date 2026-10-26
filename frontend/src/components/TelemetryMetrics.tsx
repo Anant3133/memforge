@@ -1,4 +1,6 @@
 import React from 'react';
+import { LearnMore } from './LearnMore';
+import { ENGINE_TELEMETRY } from './explanations';
 import { Zap, Cpu, Layers, Activity } from 'lucide-react';
 
 interface MetricsProps {
@@ -121,6 +123,7 @@ export const TelemetryMetrics: React.FC<MetricsProps> = ({
             : 'Rejection sampling keeps output lossless'}
         </div>
       </div>
+      <LearnMore {...ENGINE_TELEMETRY} />
     </div>
   );
 };

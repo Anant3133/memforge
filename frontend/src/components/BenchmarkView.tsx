@@ -1,5 +1,13 @@
 import React, { useMemo } from 'react';
 import { Activity, Clock, Gauge, Timer } from 'lucide-react';
+import { LearnMore, LearnMoreProps } from './LearnMore';
+import {
+  KV_POOL_USED,
+  REQUEST_TIMINGS,
+  RUNNING_SEQUENCES,
+  TOKENS_PER_PASS,
+  TOKENS_PER_SECOND,
+} from './explanations';
 
 /**
  * Latency and throughput over time.
@@ -147,8 +155,10 @@ const ChartCard: React.FC<{
   title: string;
   current: string;
   hint: string;
+  /** The method behind the number, shown on demand. */
+  explain: LearnMoreProps;
   children: React.ReactNode;
-}> = ({ icon, title, current, hint, children }) => (
+}> = ({ icon, title, current, hint, explain, children }) => (
   <div
     style={{
       flex: '1 1 260px',
@@ -195,6 +205,7 @@ const ChartCard: React.FC<{
       </div>
     </div>
     {children}
+    <LearnMore {...explain} />
   </div>
 );
 
@@ -277,6 +288,7 @@ export const BenchmarkView: React.FC<BenchmarkViewProps> = ({
           title="tokens / forward pass"
           current={latest ? latest.tokensPerForwardPass.toFixed(2) : '--'}
           hint="The clearest evidence batching is working. 1.0 means no batching at all; 6.29 was measured at 8 concurrent requests."
+          explain={TOKENS_PER_PASS}
         >
           <Sparkline
             values={series.tpfp}
@@ -291,6 +303,7 @@ export const BenchmarkView: React.FC<BenchmarkViewProps> = ({
           title="tokens / second"
           current={latest ? latest.tokensPerSecond.toFixed(1) : '--'}
           hint="Aggregate generation rate over a 5-second window."
+          explain={TOKENS_PER_SECOND}
         >
           <Sparkline values={series.tps} color="var(--accent-cyan)" />
         </ChartCard>
@@ -300,6 +313,7 @@ export const BenchmarkView: React.FC<BenchmarkViewProps> = ({
           title="running sequences"
           current={latest ? String(latest.runningSequences) : '--'}
           hint="Sequences the scheduler is advancing this step."
+          explain={RUNNING_SEQUENCES}
         >
           <Sparkline values={series.running} color="var(--accent-purple)" />
         </ChartCard>
@@ -309,6 +323,7 @@ export const BenchmarkView: React.FC<BenchmarkViewProps> = ({
           title="KV pool used"
           current={latest ? `${(latest.memoryUtilization * 100).toFixed(1)}%` : '--'}
           hint="Fraction of physical blocks allocated."
+          explain={KV_POOL_USED}
         >
           <Sparkline values={series.util} color="var(--accent-amber)" yMax={100} />
         </ChartCard>
@@ -478,6 +493,7 @@ export const BenchmarkView: React.FC<BenchmarkViewProps> = ({
           )}
         </div>
       </div>
+      <LearnMore {...REQUEST_TIMINGS} />
     </div>
   );
 };

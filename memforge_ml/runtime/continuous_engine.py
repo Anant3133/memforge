@@ -1336,6 +1336,59 @@ class ContinuousBatchingEngine:
         span = self._recent_tokens[-1] - self._recent_tokens[0]
         return round(len(self._recent_tokens) / span, 2) if span > 0 else 0.0
 
+    def _device_telemetry(self) -> Dict[str, Any]:
+        """
+        Where the KV pool lives, and what the device actually has allocated.
+
+        `peak_memory_mb` comes from `torch.cuda.max_memory_allocated`, which has
+        no CPU equivalent -- there is no allocator to ask -- so on CPU it is
+        reported as None rather than 0.0. Zero would read as "measured, and it
+        was nothing", which is exactly the kind of number that makes a dashboard
+        lie. This was Phase E's first bullet and could not be filled until a
+        CUDA build was installed.
+
+        `pool_mb` is what MemForge itself reserved up front; `allocated_mb` is
+        everything torch holds, weights included. The gap between them is the
+        model, so both are worth showing.
+        """
+        pool = self.pool.describe()
+        payload: Dict[str, Any] = {
+            "device": pool["device"],
+            "dtype": pool["dtype"],
+            "num_blocks": pool["num_blocks"],
+            "block_size": pool["block_size"],
+            "capacity_tokens": pool["capacity_tokens"],
+            "pool_mb": pool["total_mb"],
+            "cuda_available": torch.cuda.is_available(),
+        }
+        if torch.cuda.is_available() and str(pool["device"]).startswith("cuda"):
+            mb = 1024 * 1024
+            free_bytes, total_bytes = torch.cuda.mem_get_info()
+            payload.update(
+                {
+                    "device_name": torch.cuda.get_device_name(0),
+                    "allocated_mb": round(torch.cuda.memory_allocated() / mb, 2),
+                    "peak_memory_mb": round(torch.cuda.max_memory_allocated() / mb, 2),
+                    "reserved_mb": round(torch.cuda.memory_reserved() / mb, 2),
+                    "vram_total_mb": round(total_bytes / mb, 2),
+                    "vram_free_mb": round(free_bytes / mb, 2),
+                }
+            )
+        else:
+            # None, not 0.0: nothing measured it, which is different from
+            # measuring it and finding nothing.
+            payload.update(
+                {
+                    "device_name": None,
+                    "allocated_mb": None,
+                    "peak_memory_mb": None,
+                    "reserved_mb": None,
+                    "vram_total_mb": None,
+                    "vram_free_mb": None,
+                }
+            )
+        return payload
+
     def telemetry(self) -> Dict[str, Any]:
         uptime = time.perf_counter() - self.engine_started_at
         active = [rt for rt in self.runtimes.values() if not rt.done]
@@ -1349,6 +1402,7 @@ class ContinuousBatchingEngine:
         )
         return {
             **sharing,
+            **self._device_telemetry(),
             "uptime_s": round(uptime, 2),
             "steps": self.total_steps,
             "forward_passes": self.total_forward_passes,

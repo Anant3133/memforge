@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { LearnMore } from './LearnMore';
+import { PREFIX_SHARING } from './explanations';
 import { Copy, Layers, TrendingDown } from 'lucide-react';
 
 /**
@@ -398,6 +400,7 @@ export const PrefixVisualizer: React.FC<PrefixVisualizerProps> = ({
           </div>
         </>
       )}
+      <LearnMore {...PREFIX_SHARING} />
     </div>
   );
 };

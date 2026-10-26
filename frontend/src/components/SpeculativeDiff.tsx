@@ -1,4 +1,6 @@
 import React from 'react';
+import { LearnMore } from './LearnMore';
+import { SPECULATIVE_TOKENS } from './explanations';
 import { Eye } from 'lucide-react';
 import type { TokenSource } from '../services/api';
 
@@ -121,6 +123,7 @@ export const SpeculativeDiff: React.FC<SpeculativeDiffProps> = ({
           <span> &middot; output is statistically identical to the target model alone</span>
         </div>
       )}
+      <LearnMore {...SPECULATIVE_TOKENS} />
     </div>
   );
 };

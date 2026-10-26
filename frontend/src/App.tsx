@@ -7,9 +7,11 @@ import { ChatStream } from './components/ChatStream';
 import { PrefixVisualizer } from './components/PrefixVisualizer';
 import { BenchmarkView, RequestTiming, TelemetrySample } from './components/BenchmarkView';
 import { StatusBanner, ConnectionState } from './components/StatusBanner';
+import { DevicePanel } from './components/DevicePanel';
 import { StreamClient, TelemetryClient, StreamEvent, TelemetryEvent } from './services/websocket';
 import {
   EngineBusyError,
+  EngineTelemetry,
   fetchEngineStatus,
   fetchHealth,
   pollEngineState,
@@ -79,6 +81,8 @@ export const App: React.FC = () => {
 
   const streamRef = useRef<StreamClient | null>(null);
 
+  const [telemetry, setTelemetry] = useState<EngineTelemetry | null>(null);
+
   // Ambient telemetry: keeps the memory map and gauges live even while idle.
   useEffect(() => {
     const telemetry = new TelemetryClient();
@@ -100,6 +104,9 @@ export const App: React.FC = () => {
 
       const t = event.telemetry;
       setEngineReady(true);
+      // The device panel reads a dozen fields that never change after
+      // startup; holding the payload is cleaner than a setter each.
+      setTelemetry(t);
       setTokensPerSec(t.tokens_per_second);
       setTokensPerForwardPass(t.tokens_per_forward_pass);
       setMemoryUtilization(t.memory_utilization);
@@ -420,6 +427,22 @@ export const App: React.FC = () => {
           <AlertTriangle size={16} color="var(--accent-amber)" />
           <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{error}</span>
         </div>
+      )}
+
+      {telemetry && (
+        <DevicePanel
+          device={telemetry.device}
+          deviceName={telemetry.device_name}
+          dtype={telemetry.dtype}
+          cudaAvailable={telemetry.cuda_available}
+          poolMb={telemetry.pool_mb}
+          numBlocks={telemetry.num_blocks}
+          capacityTokens={telemetry.capacity_tokens}
+          allocatedMb={telemetry.allocated_mb}
+          peakMemoryMb={telemetry.peak_memory_mb}
+          vramTotalMb={telemetry.vram_total_mb}
+          vramFreeMb={telemetry.vram_free_mb}
+        />
       )}
 
       <TelemetryMetrics
