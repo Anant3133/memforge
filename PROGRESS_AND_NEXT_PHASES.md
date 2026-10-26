@@ -507,14 +507,42 @@ evidence, and this document does not record numbers that were not measured.
       at concurrency 8, 0 leaked blocks, all blocks returned, RSS flat after
       warm-up. `scripts/traffic_simulator.py` adds mid-stream disconnects.
 - [x] Structured logging — text and JSON via `server/logging_config.py`.
-- [ ] Memory-leak profiling under sustained load (AddressSanitizer on the C++
-      side).
+- [x] Memory-leak profiling under sustained load (AddressSanitizer on the C++
+      side). `scripts/cpp_asan.py` + `tests/cpp/asan_sustained_load.cpp`.
+      **Clean across 180 cycles of 16 concurrent requests (40,428 tokens)**,
+      with prefix sharing (56% hit rate), copy-on-write, preemption and cache
+      eviction all exercised, and the free list asserted back to its starting
+      size on *every* cycle rather than once at the end — a leak that recurs
+      per cycle and one that happens once look identical in a final total.
+
+      Two passes, because one tool does not cover it: **MSVC's
+      AddressSanitizer detects no leaks on Windows** (it ships no
+      LeakSanitizer), so a second pass builds the same driver against the debug
+      CRT with `_CRTDBG_LEAK_CHECK_DF`. That is verified rather than assumed —
+      `--verify-tooling` compiles `tests/cpp/sanitizer_probe.cpp`, which
+      contains a known leak, a known use-after-free and a known overflow, and
+      prints which pass catches which. The script refuses to report a clean
+      result if any defect class is uncovered, because a misconfigured
+      sanitizer detects nothing and that is indistinguishable from clean code:
+
+      | pass | leak | use-after-free | buffer overflow |
+      |---|---|---|---|
+      | AddressSanitizer | missed | detected | detected |
+      | CRT debug heap | detected | missed | missed |
+
+      The setup was then validated against *this* codebase, not just the probe,
+      by injecting real defects into `block_allocator.cpp`: a double free and a
+      missing `ref_count++` on share were both caught. A third — deleting the
+      upper-bound check in `get_ref_count` — was **not**, because no test and
+      no load pattern ever passes an out-of-range block id. That guard now has
+      a unit test (`test_out_of_range_ids_are_refused`), which fails when it is
+      removed.
 - **Done when:** the server survives a sustained multi-client load test with flat
   memory and no leaked blocks. — **Met.** 110 requests at concurrency 8:
   0 leaked blocks at every sample, allocation back to its starting value, and
   RSS growth of +15.3 MB against +34.9 MB over 45 requests — not monotonic in
-  request count, which is allocator caching rather than a leak. Only
-  AddressSanitizer profiling on the C++ side remains outstanding.
+  request count, which is allocator caching rather than a leak. The C++ side is
+  now covered too, per the item above.
 
 ---
 

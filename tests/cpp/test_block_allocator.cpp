@@ -144,6 +144,51 @@ void test_zero_lookahead_matches_plain_capacity() {
     std::cout << "test_zero_lookahead_matches_plain_capacity PASSED." << std::endl;
 }
 
+void test_out_of_range_ids_are_refused() {
+    std::cout << "Running test_out_of_range_ids_are_refused..." << std::endl;
+    // These guards are the boundary between a bad caller and a heap read past
+    // the end of blocks_. Nothing in normal operation passes an out-of-range
+    // id, which is exactly why the guards need a test rather than relying on
+    // load testing to notice: deleting the bound in get_ref_count left the
+    // whole suite green and an AddressSanitizer run clean.
+    BlockAllocator allocator(4, 4);
+
+    const BlockId past_end = 4;
+    const BlockId far_past_end = 999999;
+    const BlockId negative = -1;
+
+    for (BlockId bad : {past_end, far_past_end, negative}) {
+        assert(allocator.get_ref_count(bad) == 0);
+        // Taking a reference on a nonexistent block must fail rather than
+        // corrupt the block next to it.
+        assert(!allocator.add_ref(bad));
+        // Freeing one must be a no-op, not a write through a bad index.
+        allocator.free(bad);
+    }
+    assert(allocator.get_num_free_blocks() == 4);
+
+    // A real block still behaves normally afterwards, so the rejections left
+    // no damage behind.
+    BlockId good = allocator.allocate();
+    assert(good != INVALID_BLOCK_ID);
+    assert(allocator.get_ref_count(good) == 1);
+    assert(allocator.add_ref(good));
+    assert(allocator.get_ref_count(good) == 2);
+    allocator.free(good);
+    allocator.free(good);
+    assert(allocator.get_num_free_blocks() == 4);
+
+    // prepare_write on a logical index the sequence does not have must decline
+    // rather than read off the end of the block table.
+    Sequence seq(1, {1, 2, 3}, 8, 4);
+    assert(allocator.ensure_capacity(seq));
+    assert(!allocator.prepare_write(seq, 99).has_value());
+    allocator.free_sequence(seq);
+    assert(allocator.get_num_free_blocks() == 4);
+
+    std::cout << "test_out_of_range_ids_are_refused PASSED." << std::endl;
+}
+
 int main() {
     std::cout << "=== MemForge BlockAllocator Unit Tests ===" << std::endl;
     test_basic_allocation();
@@ -151,6 +196,7 @@ int main() {
     test_lookahead_reservation();
     test_lookahead_reservation_is_all_or_nothing();
     test_zero_lookahead_matches_plain_capacity();
+    test_out_of_range_ids_are_refused();
     std::cout << "All BlockAllocator tests passed successfully!" << std::endl;
     return 0;
 }

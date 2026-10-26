@@ -186,9 +186,10 @@ bridge, and the API. All 7 pipeline stages pass via `python scripts/run_pipeline
       propagated into a scheduler abort, `max_concurrency` enforced with 429 +
       `Retry-After`, a `/metrics` endpoint, sustained load verified at 110
       requests with **0 leaked blocks**, and structured text/JSON logging.
-      `EngineCore` resolved by deletion. Only AddressSanitizer profiling on the
-      C++ side remains, tracked in
-      [PROGRESS_AND_NEXT_PHASES.md](PROGRESS_AND_NEXT_PHASES.md) §8
+      `EngineCore` resolved by deletion. AddressSanitizer profiling on the C++
+      side is now done too (`scripts/cpp_asan.py`): clean over 180 cycles of 16
+      concurrent requests, under both ASan and the debug CRT — two passes
+      because MSVC's ASan detects no leaks on Windows.
 
 Next phases are specified with definitions of done in
 [PROGRESS_AND_NEXT_PHASES.md](PROGRESS_AND_NEXT_PHASES.md#8-next-phases).
