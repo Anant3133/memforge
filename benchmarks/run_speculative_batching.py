@@ -8,10 +8,13 @@ Phase D's definition of done has two halves, and they need different machines:
     target forward passes a round costs. Measurable here, on CPU, because it is
     a count, not a time.
   * *"a GPU run either confirms or refutes the 2-3x claim"* -- a wall-clock
-    claim. **Not measurable here**: `torch.cuda.is_available()` is False, and
-    the only model pair that fits on this CPU (a 360M target with a 135M draft)
-    is too close in cost for speculation to pay. §3.5 of
-    PROGRESS_AND_NEXT_PHASES.md already measured that at 0.58x -- slower.
+    claim. **Not measurable here**, because the installed torch is the CPU-only
+    wheel and `torch.cuda.is_available()` is False. Note that this is a package
+    limitation and not a hardware one: the machine does have a CUDA GPU, so
+    unblocking it means reinstalling torch, not finding different hardware.
+    Separately, the only model pair that fits on this CPU (a 360M target with a
+    135M draft) is too close in cost for speculation to pay -- §3.5 of
+    PROGRESS_AND_NEXT_PHASES.md measured that at 0.58x, slower.
 
 So this script measures the first half honestly and refuses to fake the second.
 
@@ -269,8 +272,9 @@ def main() -> int:
             f"and a 135M draft are too close in cost for speculation to pay, "
             f"and the draft's K passes are serial. The 2-3x claim in the plan "
             f"is a GPU claim about a pair with a real cost gap, and this "
-            f"machine has no CUDA device, so it is neither confirmed nor "
-            f"refuted here."
+            f"installed torch is the CPU-only wheel ({torch.__version__}), so "
+            f"no GPU is reachable from here and the claim is neither confirmed "
+            f"nor refuted."
         )
     for line in verdict_lines:
         print(f"  - {line}")

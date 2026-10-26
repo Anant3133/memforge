@@ -35,7 +35,9 @@ too close in cost and the draft's K passes are serial. Batched verification
 removes the *per-sequence* multiplication of target passes, which is what made
 speculation and batching mutually exclusive, but it does not change that
 arithmetic. The phase's own definition of done asks for a GPU run to confirm or
-refute the 2-3x claim, and that cannot be produced on this machine.
+refute the 2-3x claim, which the installed CPU-only torch build cannot produce
+-- a package limitation rather than a hardware one, since the machine does have
+a CUDA GPU.
 """
 
 from __future__ import annotations

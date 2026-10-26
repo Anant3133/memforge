@@ -327,8 +327,14 @@ These are deliberate scope boundaries, not unknowns:
    conclusion rather than a design one.
 5. ~~**No prefix sharing.**~~ **Resolved 2026-10-24 (Phase B).** Sequences with a
    common prompt prefix now point at the same physical blocks. See section 10.
-6. **CPU only.** No CUDA device has been exercised; `fp16`/device placement paths
-   exist but are untested.
+6. **CPU only** — by package, not by hardware. This machine *does* have a CUDA
+   GPU (`nvidia-smi` reports an NVIDIA GeForce RTX 4050 Laptop GPU), but the
+   installed torch is the CPU-only wheel: `torch 2.13.0+cpu`, with
+   `torch.version.cuda is None`, so `torch.cuda.is_available()` is False.
+   Nothing has been exercised on the GPU and the `fp16`/device-placement paths
+   are untested. Unblocking this is a torch reinstall against a CUDA build, not
+   a hardware purchase — worth stating precisely, because an earlier draft of
+   this document said "no CUDA device", which is simply untrue.
 7. ~~**`EngineCore`** is declared with no implementation.~~ **Resolved
    2026-10-24: deleted.** The header declared a class with no definition
    anywhere, bound nothing to Python, and was reachable only through an unused
@@ -477,8 +483,13 @@ Implemented. Measured results and design notes in section 10 below.
       difference between speculation and batching *composing* and merely
       coexisting.
 - [ ] Re-benchmark on a pair with a real cost gap (e.g. Llama-3-8B +
-      Llama-3.2-1B). **Blocked:** `torch.cuda.is_available()` is `False` on this
-      machine (`torch 2.13.0+cpu`), and an 8B target is not runnable on CPU.
+      Llama-3.2-1B). **Not done, and blocked on the environment rather than on
+      the code.** The installed torch is the CPU-only wheel (`2.13.0+cpu`,
+      `torch.version.cuda is None`), so no GPU is reachable from this
+      interpreter even though the machine has one (an RTX 4050). An 8B target
+      is not runnable on this CPU in any case. Unblocking needs a CUDA torch
+      build; the 4050's 6 GB would still not hold an 8B target in fp16, so a
+      smaller pair with a genuine cost gap would be the realistic test here.
 
 **Measured** -- `benchmarks/run_speculative_batching.py`, SmolLM2-360M target
 with a 135M draft, K=4, 16 tokens per sequence, greedy, CPU:
@@ -522,13 +533,26 @@ narrower, honest conclusion: **the structural obstacle to using speculation
 with continuous batching is gone, and on this hardware speculation is still not
 worth enabling** (0.62x-0.77x). Both halves of that sentence matter.
 
-### Phase E — GPU execution 🚫 **BLOCKED: no CUDA device**
+### Phase E — GPU execution 🚫 **BLOCKED: CPU-only torch build**
 
-Nothing in this phase is verifiable on this machine -- `torch 2.13.0+cpu`, and
-`torch.cuda.is_available()` is `False`. The code paths are written to be
-device-agnostic (`ModelKVSpec` carries dtype and device, the pool allocates on
-whatever device the model is on), but "device-agnostic by construction" is not
-evidence, and this document does not record numbers that were not measured.
+Not startable as the environment stands, but the blocker is a package, not the
+hardware. The machine has a CUDA GPU — `nvidia-smi -L` reports an NVIDIA
+GeForce RTX 4050 Laptop GPU — while the installed torch is the CPU-only wheel
+(`2.13.0+cpu`, `torch.version.cuda is None`), so `torch.cuda.is_available()` is
+False and no GPU is reachable from this interpreter.
+
+**To unblock:** reinstall torch against a CUDA build in the project venv. That
+is a deliberate change to a working environment (a multi-GB download replacing
+the torch the current 396-test suite is green against), so it is left as a
+decision rather than done silently. The 4050's 6 GB of VRAM also sets the
+ceiling on what can be tested: it is enough for the 360M/135M pair and for real
+`max_memory_allocated` telemetry, not for the 8B targets Phase D's 2-3x claim
+is about.
+
+The code paths are written to be device-agnostic (`ModelKVSpec` carries dtype
+and device, the pool allocates on whatever device the model is on), but
+"device-agnostic by construction" is not evidence, and this document does not
+record numbers that were not measured.
 
 - Exercise CUDA: `fp16`/`bf16`, pool allocated in VRAM, real `max_memory_allocated`
   telemetry instead of the current zero on CPU.
