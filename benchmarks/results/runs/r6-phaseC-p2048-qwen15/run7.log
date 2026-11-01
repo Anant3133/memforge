@@ -1,0 +1,9 @@
+
+==============================================================================
+MemForge Phase C — does a long prompt stall in-flight decoding?
+==============================================================================
+model            : Qwen/Qwen2.5-1.5B-Instruct
+intruding prompt : 2048 tokens
+victim           : 32-token prompt, 16 tokens generated
+budgets          : [0, 128, 32, 8]  (0 = unlimited, the old behaviour)
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  14%|#3        | 47/338 [00:00<00:00, 463.94it/s]Loading weights:  36%|###5      | 121/338 [00:00<00:00, 623.43it/s]Loading weights:  58%|#####8    | 197/338 [00:00<00:00, 677.13it/s]Loading weights:  86%|########6 | 291/338 [00:00<00:00, 771.77it/s]Loading weights: 100%|##########| 338/338 [00:00<00:00, 745.72it/s]
