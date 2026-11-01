@@ -1,0 +1,44 @@
+
+==============================================================================
+Tooling capability check
+==============================================================================
+
+  pass              leak                use-after-free      buffer-overflow     
+  AddressSanitizer  MISSED              detected            detected            
+  CRT debug heap    detected            MISSED              MISSED              
+
+  AddressSanitizer misses leaks on this toolchain, as expected:
+  MSVC ships no LeakSanitizer. This is why the CRT debug-heap
+  pass exists, and why running ASan alone would not close the
+  Phase F item.
+  All of leak, use-after-free, buffer-overflow are covered by at least one pass.
+
+==============================================================================
+AddressSanitizer: sustained load, 40 cycles x 12 requests
+==============================================================================
+   sustained load: 40 cycles x 12 requests, 256 blocks of 16
+   generated 9896 tokens; free blocks 256/256
+   prefix cache: 27 hits, 30 misses, hit rate 0.474
+   no logical block leak across 60 cycles
+   SUSTAINED LOAD PASSED
+
+  exit=0  defects=none  -> CLEAN
+
+==============================================================================
+CRT debug heap: sustained load, 40 cycles x 12 requests
+==============================================================================
+   sustained load: 40 cycles x 12 requests, 256 blocks of 16
+   generated 9896 tokens; free blocks 256/256
+   prefix cache: 27 hits, 30 misses, hit rate 0.474
+   no logical block leak across 60 cycles
+   SUSTAINED LOAD PASSED
+
+  exit=0  defects=none  -> CLEAN
+
+==============================================================================
+Verdict
+==============================================================================
+  AddressSanitizer     clean
+  CRT debug heap       clean
+
+  No use-after-free, buffer overflow, double free or heap leak across 40 cycles of 12 concurrent requests, with prefix sharing, copy-on-write, preemption and cache eviction all exercised. The driver also asserts every cycle that the free list returns to its starting size, which is the logical-leak half that no sanitizer checks.

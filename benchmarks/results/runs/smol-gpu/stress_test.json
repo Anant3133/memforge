@@ -1,0 +1,1059 @@
+{
+  "benchmark": "stress_test",
+  "phase": "F",
+  "generated_at": "2026-11-01T22:08:59",
+  "platform": {
+    "system": "Windows",
+    "python": "3.12.7"
+  },
+  "config": {
+    "url": "http://127.0.0.1:8123",
+    "requests": 110,
+    "concurrent_clients": 8,
+    "warmup": 5,
+    "tokens": 16,
+    "stream": false,
+    "kv_budget_mb": 192.0,
+    "max_concurrency": 8
+  },
+  "duration_s": 54.98,
+  "passed": true,
+  "verdicts": [
+    "PASS  no leaked blocks at any sample",
+    "PASS  all physical blocks returned to the pool",
+    "PASS  RSS flat after warm-up (+4.8 MB)"
+  ],
+  "total_requests": 115,
+  "succeeded": 115,
+  "failed": 0,
+  "status_counts": {
+    "200": 115
+  },
+  "initial_rss_mb": 1480.8,
+  "plateau_rss_mb": 2377.1,
+  "peak_rss_mb": 2381.9,
+  "final_rss_mb": 2381.9,
+  "rss_growth_after_warmup_mb": 4.8,
+  "leaked_blocks": 0,
+  "blocks_allocated_at_start": 0,
+  "blocks_allocated_at_end": 0,
+  "peak_blocks_allocated": 25,
+  "peak_blocks_shared": 2,
+  "peak_in_flight": 8,
+  "p50_ttft_ms": 55.83,
+  "p95_ttft_ms": 301.91,
+  "p99_ttft_ms": 371.57,
+  "mean_tok_per_sec": 16.28,
+  "total_tokens": 1840,
+  "samples_taken": 112,
+  "samples": [
+    {
+      "t": 303504.26,
+      "rss_mb": 1480.76953125,
+      "blocks_allocated": 0,
+      "blocks_free": 307,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 0
+    },
+    {
+      "t": 303504.268,
+      "rss_mb": 1480.76953125,
+      "blocks_allocated": 0,
+      "blocks_free": 307,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 0
+    },
+    {
+      "t": 303504.802,
+      "rss_mb": 2322.8125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303505.326,
+      "rss_mb": 2375.24609375,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303505.844,
+      "rss_mb": 2375.79296875,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303506.356,
+      "rss_mb": 2375.8125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303506.873,
+      "rss_mb": 2375.81640625,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303507.386,
+      "rss_mb": 2375.81640625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303507.901,
+      "rss_mb": 2375.81640625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303508.415,
+      "rss_mb": 2375.828125,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303508.936,
+      "rss_mb": 2375.875,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303509.44,
+      "rss_mb": 2375.8984375,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303509.969,
+      "rss_mb": 2375.8984375,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303510.488,
+      "rss_mb": 2375.90234375,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303511.019,
+      "rss_mb": 2375.92578125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303511.539,
+      "rss_mb": 2375.99609375,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303512.057,
+      "rss_mb": 2376.0625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303512.571,
+      "rss_mb": 2376.0625,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303513.088,
+      "rss_mb": 2376.0625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303513.604,
+      "rss_mb": 2376.0625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303514.12,
+      "rss_mb": 2376.07421875,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303514.635,
+      "rss_mb": 2376.09765625,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303515.149,
+      "rss_mb": 2376.11328125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303515.663,
+      "rss_mb": 2376.1171875,
+      "blocks_allocated": 0,
+      "blocks_free": 307,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 0
+    },
+    {
+      "t": 303516.185,
+      "rss_mb": 2376.1171875,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303516.688,
+      "rss_mb": 2376.12109375,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303517.205,
+      "rss_mb": 2376.16015625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303517.731,
+      "rss_mb": 2376.18359375,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303518.244,
+      "rss_mb": 2376.2421875,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303518.758,
+      "rss_mb": 2376.8125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303519.276,
+      "rss_mb": 2376.8125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303519.79,
+      "rss_mb": 2376.8203125,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303520.31,
+      "rss_mb": 2376.83984375,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303520.822,
+      "rss_mb": 2376.8671875,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303521.339,
+      "rss_mb": 2376.90234375,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303521.86,
+      "rss_mb": 2376.90234375,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303522.382,
+      "rss_mb": 2376.90234375,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303522.909,
+      "rss_mb": 2376.91015625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303523.442,
+      "rss_mb": 2376.91796875,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303523.973,
+      "rss_mb": 2376.984375,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303524.518,
+      "rss_mb": 2377.01171875,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303525.034,
+      "rss_mb": 2377.01953125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303525.549,
+      "rss_mb": 2377.01953125,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303526.084,
+      "rss_mb": 2377.01953125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303526.613,
+      "rss_mb": 2377.01953125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303527.144,
+      "rss_mb": 2377.01953125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303527.662,
+      "rss_mb": 2377.01953125,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303528.182,
+      "rss_mb": 2377.01953125,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303528.71,
+      "rss_mb": 2377.0234375,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303529.228,
+      "rss_mb": 2377.02734375,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303529.742,
+      "rss_mb": 2377.03125,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303530.254,
+      "rss_mb": 2377.046875,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303530.788,
+      "rss_mb": 2377.046875,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303531.319,
+      "rss_mb": 2377.046875,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303531.841,
+      "rss_mb": 2377.046875,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303532.369,
+      "rss_mb": 2377.05078125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303532.894,
+      "rss_mb": 2377.0625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303533.41,
+      "rss_mb": 2377.09375,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303533.923,
+      "rss_mb": 2377.09375,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303534.473,
+      "rss_mb": 2377.09765625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303534.986,
+      "rss_mb": 2377.10546875,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303535.515,
+      "rss_mb": 2377.109375,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303536.033,
+      "rss_mb": 2377.21484375,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303536.55,
+      "rss_mb": 2377.2578125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303537.07,
+      "rss_mb": 2377.2578125,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303537.588,
+      "rss_mb": 2377.2578125,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303538.09,
+      "rss_mb": 2377.2578125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303538.608,
+      "rss_mb": 2377.2578125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303539.127,
+      "rss_mb": 2377.2578125,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303539.644,
+      "rss_mb": 2377.265625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303540.17,
+      "rss_mb": 2377.265625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303540.684,
+      "rss_mb": 2377.265625,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303541.202,
+      "rss_mb": 2377.265625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303541.72,
+      "rss_mb": 2377.265625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303542.253,
+      "rss_mb": 2377.2734375,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303542.778,
+      "rss_mb": 2377.296875,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303543.312,
+      "rss_mb": 2377.296875,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303543.825,
+      "rss_mb": 2377.30078125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303544.356,
+      "rss_mb": 2377.30078125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303544.875,
+      "rss_mb": 2377.30078125,
+      "blocks_allocated": 0,
+      "blocks_free": 307,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 0
+    },
+    {
+      "t": 303545.405,
+      "rss_mb": 2377.328125,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303545.912,
+      "rss_mb": 2377.34765625,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303546.427,
+      "rss_mb": 2377.34765625,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303546.949,
+      "rss_mb": 2377.74609375,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303547.47,
+      "rss_mb": 2377.8984375,
+      "blocks_allocated": 4,
+      "blocks_free": 303,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 1
+    },
+    {
+      "t": 303547.993,
+      "rss_mb": 2380.25390625,
+      "blocks_allocated": 16,
+      "blocks_free": 291,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 8
+    },
+    {
+      "t": 303548.507,
+      "rss_mb": 2381.015625,
+      "blocks_allocated": 16,
+      "blocks_free": 291,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 8
+    },
+    {
+      "t": 303549.026,
+      "rss_mb": 2381.14453125,
+      "blocks_allocated": 24,
+      "blocks_free": 283,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 8
+    },
+    {
+      "t": 303549.545,
+      "rss_mb": 2381.25390625,
+      "blocks_allocated": 16,
+      "blocks_free": 291,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 8
+    },
+    {
+      "t": 303550.068,
+      "rss_mb": 2381.2890625,
+      "blocks_allocated": 16,
+      "blocks_free": 291,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 8
+    },
+    {
+      "t": 303550.588,
+      "rss_mb": 2381.32421875,
+      "blocks_allocated": 24,
+      "blocks_free": 283,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 8
+    },
+    {
+      "t": 303551.109,
+      "rss_mb": 2381.390625,
+      "blocks_allocated": 17,
+      "blocks_free": 290,
+      "blocks_leaked": 0,
+      "blocks_shared": 1,
+      "in_flight": 8
+    },
+    {
+      "t": 303551.625,
+      "rss_mb": 2381.41796875,
+      "blocks_allocated": 17,
+      "blocks_free": 290,
+      "blocks_leaked": 0,
+      "blocks_shared": 1,
+      "in_flight": 8
+    },
+    {
+      "t": 303552.145,
+      "rss_mb": 2381.44140625,
+      "blocks_allocated": 22,
+      "blocks_free": 285,
+      "blocks_leaked": 0,
+      "blocks_shared": 1,
+      "in_flight": 8
+    },
+    {
+      "t": 303552.673,
+      "rss_mb": 2381.48828125,
+      "blocks_allocated": 3,
+      "blocks_free": 304,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 4
+    },
+    {
+      "t": 303553.182,
+      "rss_mb": 2381.55859375,
+      "blocks_allocated": 16,
+      "blocks_free": 291,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 8
+    },
+    {
+      "t": 303553.698,
+      "rss_mb": 2381.515625,
+      "blocks_allocated": 21,
+      "blocks_free": 286,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 8
+    },
+    {
+      "t": 303554.22,
+      "rss_mb": 2381.55078125,
+      "blocks_allocated": 22,
+      "blocks_free": 285,
+      "blocks_leaked": 0,
+      "blocks_shared": 1,
+      "in_flight": 8
+    },
+    {
+      "t": 303554.74,
+      "rss_mb": 2381.60546875,
+      "blocks_allocated": 17,
+      "blocks_free": 290,
+      "blocks_leaked": 0,
+      "blocks_shared": 1,
+      "in_flight": 8
+    },
+    {
+      "t": 303555.258,
+      "rss_mb": 2381.60546875,
+      "blocks_allocated": 17,
+      "blocks_free": 290,
+      "blocks_leaked": 0,
+      "blocks_shared": 1,
+      "in_flight": 8
+    },
+    {
+      "t": 303555.777,
+      "rss_mb": 2381.62109375,
+      "blocks_allocated": 25,
+      "blocks_free": 282,
+      "blocks_leaked": 0,
+      "blocks_shared": 1,
+      "in_flight": 8
+    },
+    {
+      "t": 303556.297,
+      "rss_mb": 2381.7421875,
+      "blocks_allocated": 16,
+      "blocks_free": 291,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 8
+    },
+    {
+      "t": 303556.817,
+      "rss_mb": 2381.7734375,
+      "blocks_allocated": 16,
+      "blocks_free": 291,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 8
+    },
+    {
+      "t": 303557.336,
+      "rss_mb": 2381.8125,
+      "blocks_allocated": 24,
+      "blocks_free": 283,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 8
+    },
+    {
+      "t": 303557.844,
+      "rss_mb": 2381.8203125,
+      "blocks_allocated": 14,
+      "blocks_free": 293,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 7
+    },
+    {
+      "t": 303558.363,
+      "rss_mb": 2381.88671875,
+      "blocks_allocated": 14,
+      "blocks_free": 293,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 7
+    },
+    {
+      "t": 303558.882,
+      "rss_mb": 2381.8984375,
+      "blocks_allocated": 20,
+      "blocks_free": 287,
+      "blocks_leaked": 0,
+      "blocks_shared": 2,
+      "in_flight": 7
+    },
+    {
+      "t": 303559.402,
+      "rss_mb": 2381.94921875,
+      "blocks_allocated": 0,
+      "blocks_free": 307,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 0
+    },
+    {
+      "t": 303559.913,
+      "rss_mb": 2381.94921875,
+      "blocks_allocated": 0,
+      "blocks_free": 307,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 0
+    },
+    {
+      "t": 303560.429,
+      "rss_mb": 2381.94921875,
+      "blocks_allocated": 0,
+      "blocks_free": 307,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 0
+    },
+    {
+      "t": 303560.943,
+      "rss_mb": 2381.94921875,
+      "blocks_allocated": 0,
+      "blocks_free": 307,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 0
+    },
+    {
+      "t": 303561.261,
+      "rss_mb": 2381.94921875,
+      "blocks_allocated": 0,
+      "blocks_free": 307,
+      "blocks_leaked": 0,
+      "blocks_shared": 0,
+      "in_flight": 0
+    }
+  ]
+}

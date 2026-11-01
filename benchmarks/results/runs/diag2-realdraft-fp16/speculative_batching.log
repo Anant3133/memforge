@@ -1,0 +1,102 @@
+
+==============================================================================
+Phase D - speculative decoding inside continuous batching
+==============================================================================
+target model : Qwen/Qwen2.5-1.5B-Instruct
+draft model  : Qwen/Qwen2.5-0.5B-Instruct
+lookahead K  : 4  (scheduler reserves K+1 = 5 slots per sequence per step)
+device       : cuda:0 torch.float16
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  30%|##9       | 101/338 [00:00<00:00, 980.58it/s]Loading weights:  62%|######1   | 209/338 [00:00<00:00, 1032.73it/s]Loading weights:  93%|#########2| 313/338 [00:00<00:00, 1036.00it/s]Loading weights: 100%|##########| 338/338 [00:00<00:00, 1019.74it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  65%|######5   | 189/290 [00:00<00:00, 1880.87it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 1979.73it/s]
+
+==============================================================================
+batch = 3
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 48
+  speculative rounds                  : 6
+  verify passes (batched)             : 6
+  verify passes (per-sequence)        : 15
+  verify passes saved                 : 9
+  all target passes (incl. prefill)   : 14
+  sequences verified per round        : 2.5
+  draft acceptance rate               : 0.3833
+  tokens per target pass  spec / plain: 3.429 / 2.667
+  wall-clock tok/s        spec / plain: 18.48 / 42.3  (0.44x)
+
+==============================================================================
+batch = 4
+==============================================================================
+  output identical to non-speculative : False
+  !! speculation changed the output -- the numbers below are void
+  tokens generated                    : 64
+  speculative rounds                  : 6
+  verify passes (batched)             : 6
+  verify passes (per-sequence)        : 17
+  verify passes saved                 : 11
+  all target passes (incl. prefill)   : 16
+  sequences verified per round        : 2.833
+  draft acceptance rate               : 0.4559
+  tokens per target pass  spec / plain: 4.0 / 3.368
+  wall-clock tok/s        spec / plain: 18.75 / 69.23  (0.27x)
+
+==============================================================================
+batch = 5
+==============================================================================
+  output identical to non-speculative : False
+  !! speculation changed the output -- the numbers below are void
+  tokens generated                    : 80
+  speculative rounds                  : 6
+  verify passes (batched)             : 6
+  verify passes (per-sequence)        : 20
+  verify passes saved                 : 14
+  all target passes (incl. prefill)   : 17
+  sequences verified per round        : 3.333
+  draft acceptance rate               : 0.4875
+  tokens per target pass  spec / plain: 4.706 / 4.0
+  wall-clock tok/s        spec / plain: 21.12 / 72.86  (0.29x)
+
+==============================================================================
+batch = 6
+==============================================================================
+  output identical to non-speculative : False
+  !! speculation changed the output -- the numbers below are void
+  tokens generated                    : 96
+  speculative rounds                  : 6
+  verify passes (batched)             : 6
+  verify passes (per-sequence)        : 23
+  verify passes saved                 : 17
+  all target passes (incl. prefill)   : 18
+  sequences verified per round        : 3.833
+  draft acceptance rate               : 0.5543
+  tokens per target pass  spec / plain: 5.333 / 4.571
+  wall-clock tok/s        spec / plain: 22.96 / 75.54  (0.30x)
+
+==============================================================================
+batch = 8
+==============================================================================
+  output identical to non-speculative : False
+  !! speculation changed the output -- the numbers below are void
+  tokens generated                    : 128
+  speculative rounds                  : 6
+  verify passes (batched)             : 6
+  verify passes (per-sequence)        : 32
+  verify passes saved                 : 26
+  all target passes (incl. prefill)   : 20
+  sequences verified per round        : 5.333
+  draft acceptance rate               : 0.5234
+  tokens per target pass  spec / plain: 6.4 / 5.565
+  wall-clock tok/s        spec / plain: 23.49 / 94.71  (0.25x)
+
+==============================================================================
+Verdict
+==============================================================================
+  - Lossless at every batch size: False.
+  - Batched verification saved verify passes in 5/5 multi-sequence configurations (a batch of one has nothing to batch).
+  - Peak sequences verified per target pass: 5.333. A per-sequence verifier would have needed that many passes per round, so this is the factor by which speculation and batching compose rather than conflict.
+  - Wall-clock speedup on NVIDIA GeForce RTX 4050 Laptop GPU: 0.25x-0.44x.
+  - Values below 1.0 are not a defect of the composition. The draft runs K passes serially per sequence per round, and this model pair (Qwen/Qwen2.5-1.5B-Instruct against Qwen/Qwen2.5-0.5B-Instruct) is too close in cost for that to pay.
+  - Note that this is *worse* on GPU than on CPU, which is the expected direction: a single target pass on a GPU is latency-bound rather than compute-bound, so it is already cheap, and the draft's serial passes dominate a larger share of the round. Speculation needs the target pass to be genuinely expensive before skipping some of them pays -- that means a much larger target, not merely a faster device.
+  - So the plan's 2-3x claim is still neither confirmed nor refuted: it is about an 8B-class target, and this GPU has 6.0 GB of VRAM, which will not hold one in fp16.
+
+Wrote benchmarks\results\speculative_batching.json

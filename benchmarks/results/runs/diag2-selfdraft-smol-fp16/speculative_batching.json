@@ -1,0 +1,251 @@
+{
+  "benchmark": "speculative_batching",
+  "phase": "D",
+  "generated_at": "2026-11-01T21:45:24",
+  "platform": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "system": "Windows",
+    "python": "3.12.7",
+    "torch": "2.11.0+cu128",
+    "torch_cuda": "12.8",
+    "cuda_available": true,
+    "device": "cuda:0",
+    "dtype": "torch.float16",
+    "device_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "compute_capability": "8.9",
+    "vram_total_mb": 6140.5,
+    "vram_free_mb": 0.0
+  },
+  "peak_memory_mb": 5835.47,
+  "config": {
+    "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+    "draft_model": "(self)",
+    "lookahead_k": 4,
+    "lookahead_slots_reserved": 5,
+    "batch_sizes": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      8
+    ],
+    "max_new_tokens": 16,
+    "block_size": 16
+  },
+  "verdict": [
+    "Lossless at every batch size: True.",
+    "Batched verification saved verify passes in 6/6 multi-sequence configurations (a batch of one has nothing to batch).",
+    "Peak sequences verified per target pass: 8.0. A per-sequence verifier would have needed that many passes per round, so this is the factor by which speculation and batching compose rather than conflict.",
+    "Wall-clock speedup on NVIDIA GeForce RTX 4050 Laptop GPU: 0.30x-1.28x.",
+    "Values below 1.0 are not a defect of the composition. The draft runs K passes serially per sequence per round, and this model pair (HuggingFaceTB/SmolLM2-360M-Instruct against itself) is too close in cost for that to pay.",
+    "Note that this is *worse* on GPU than on CPU, which is the expected direction: a single target pass on a GPU is latency-bound rather than compute-bound, so it is already cheap, and the draft's serial passes dominate a larger share of the round. Speculation needs the target pass to be genuinely expensive before skipping some of them pays -- that means a much larger target, not merely a faster device.",
+    "So the plan's 2-3x claim is still neither confirmed nor refuted: it is about an 8B-class target, and this GPU has 6.0 GB of VRAM, which will not hold one in fp16."
+  ],
+  "rows": [
+    {
+      "batch_size": 1,
+      "output_identical": true,
+      "speculative": {
+        "tokens": 16,
+        "elapsed_s": 0.684,
+        "tokens_per_s": 23.38,
+        "target_forward_passes": 4,
+        "speculative_rounds": 3,
+        "naive_target_passes": 3,
+        "sequences_per_round": 1.0,
+        "target_passes_saved": 0,
+        "tokens_per_target_pass": 4.0,
+        "draft_acceptance_rate": 1.0
+      },
+      "non_speculative": {
+        "tokens": 16,
+        "elapsed_s": 0.876,
+        "tokens_per_s": 18.27,
+        "target_forward_passes": 16,
+        "speculative_rounds": 0,
+        "naive_target_passes": 0,
+        "sequences_per_round": 0.0,
+        "target_passes_saved": 0,
+        "tokens_per_target_pass": 1.0,
+        "draft_acceptance_rate": 0.0
+      },
+      "speedup": 1.28
+    },
+    {
+      "batch_size": 2,
+      "output_identical": true,
+      "speculative": {
+        "tokens": 32,
+        "elapsed_s": 1.205,
+        "tokens_per_s": 26.55,
+        "target_forward_passes": 5,
+        "speculative_rounds": 3,
+        "naive_target_passes": 6,
+        "sequences_per_round": 2.0,
+        "target_passes_saved": 3,
+        "tokens_per_target_pass": 6.4,
+        "draft_acceptance_rate": 1.0
+      },
+      "non_speculative": {
+        "tokens": 32,
+        "elapsed_s": 0.711,
+        "tokens_per_s": 45.0,
+        "target_forward_passes": 17,
+        "speculative_rounds": 0,
+        "naive_target_passes": 0,
+        "sequences_per_round": 0.0,
+        "target_passes_saved": 0,
+        "tokens_per_target_pass": 1.882,
+        "draft_acceptance_rate": 0.0
+      },
+      "speedup": 0.59
+    },
+    {
+      "batch_size": 3,
+      "output_identical": true,
+      "speculative": {
+        "tokens": 48,
+        "elapsed_s": 1.842,
+        "tokens_per_s": 26.06,
+        "target_forward_passes": 6,
+        "speculative_rounds": 3,
+        "naive_target_passes": 9,
+        "sequences_per_round": 3.0,
+        "target_passes_saved": 6,
+        "tokens_per_target_pass": 8.0,
+        "draft_acceptance_rate": 1.0
+      },
+      "non_speculative": {
+        "tokens": 48,
+        "elapsed_s": 0.862,
+        "tokens_per_s": 55.71,
+        "target_forward_passes": 18,
+        "speculative_rounds": 0,
+        "naive_target_passes": 0,
+        "sequences_per_round": 0.0,
+        "target_passes_saved": 0,
+        "tokens_per_target_pass": 2.667,
+        "draft_acceptance_rate": 0.0
+      },
+      "speedup": 0.468
+    },
+    {
+      "batch_size": 4,
+      "output_identical": true,
+      "speculative": {
+        "tokens": 64,
+        "elapsed_s": 2.43,
+        "tokens_per_s": 26.33,
+        "target_forward_passes": 7,
+        "speculative_rounds": 3,
+        "naive_target_passes": 12,
+        "sequences_per_round": 4.0,
+        "target_passes_saved": 9,
+        "tokens_per_target_pass": 9.143,
+        "draft_acceptance_rate": 1.0
+      },
+      "non_speculative": {
+        "tokens": 64,
+        "elapsed_s": 0.993,
+        "tokens_per_s": 64.48,
+        "target_forward_passes": 19,
+        "speculative_rounds": 0,
+        "naive_target_passes": 0,
+        "sequences_per_round": 0.0,
+        "target_passes_saved": 0,
+        "tokens_per_target_pass": 3.368,
+        "draft_acceptance_rate": 0.0
+      },
+      "speedup": 0.408
+    },
+    {
+      "batch_size": 5,
+      "output_identical": true,
+      "speculative": {
+        "tokens": 80,
+        "elapsed_s": 2.94,
+        "tokens_per_s": 27.21,
+        "target_forward_passes": 8,
+        "speculative_rounds": 3,
+        "naive_target_passes": 15,
+        "sequences_per_round": 5.0,
+        "target_passes_saved": 12,
+        "tokens_per_target_pass": 10.0,
+        "draft_acceptance_rate": 1.0
+      },
+      "non_speculative": {
+        "tokens": 80,
+        "elapsed_s": 1.056,
+        "tokens_per_s": 75.77,
+        "target_forward_passes": 20,
+        "speculative_rounds": 0,
+        "naive_target_passes": 0,
+        "sequences_per_round": 0.0,
+        "target_passes_saved": 0,
+        "tokens_per_target_pass": 4.0,
+        "draft_acceptance_rate": 0.0
+      },
+      "speedup": 0.359
+    },
+    {
+      "batch_size": 6,
+      "output_identical": true,
+      "speculative": {
+        "tokens": 96,
+        "elapsed_s": 3.512,
+        "tokens_per_s": 27.34,
+        "target_forward_passes": 9,
+        "speculative_rounds": 3,
+        "naive_target_passes": 18,
+        "sequences_per_round": 6.0,
+        "target_passes_saved": 15,
+        "tokens_per_target_pass": 10.667,
+        "draft_acceptance_rate": 1.0
+      },
+      "non_speculative": {
+        "tokens": 96,
+        "elapsed_s": 1.128,
+        "tokens_per_s": 85.11,
+        "target_forward_passes": 21,
+        "speculative_rounds": 0,
+        "naive_target_passes": 0,
+        "sequences_per_round": 0.0,
+        "target_passes_saved": 0,
+        "tokens_per_target_pass": 4.571,
+        "draft_acceptance_rate": 0.0
+      },
+      "speedup": 0.321
+    },
+    {
+      "batch_size": 8,
+      "output_identical": true,
+      "speculative": {
+        "tokens": 128,
+        "elapsed_s": 4.563,
+        "tokens_per_s": 28.05,
+        "target_forward_passes": 11,
+        "speculative_rounds": 3,
+        "naive_target_passes": 24,
+        "sequences_per_round": 8.0,
+        "target_passes_saved": 21,
+        "tokens_per_target_pass": 11.636,
+        "draft_acceptance_rate": 1.0
+      },
+      "non_speculative": {
+        "tokens": 128,
+        "elapsed_s": 1.37,
+        "tokens_per_s": 93.44,
+        "target_forward_passes": 23,
+        "speculative_rounds": 0,
+        "naive_target_passes": 0,
+        "sequences_per_round": 0.0,
+        "target_passes_saved": 0,
+        "tokens_per_target_pass": 5.565,
+        "draft_acceptance_rate": 0.0
+      },
+      "speedup": 0.3
+    }
+  ]
+}

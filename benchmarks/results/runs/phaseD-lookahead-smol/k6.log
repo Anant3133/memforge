@@ -1,0 +1,37 @@
+
+==============================================================================
+Phase D - speculative decoding inside continuous batching
+==============================================================================
+target model : HuggingFaceTB/SmolLM2-360M-Instruct
+draft model  : HuggingFaceTB/SmolLM2-135M-Instruct
+lookahead K  : 6  (scheduler reserves K+1 = 7 slots per sequence per step)
+device       : cpu torch.float32
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  89%|########9 | 259/290 [00:00<00:00, 2590.00it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 2612.61it/s]
+Loading weights:   0%|          | 0/272 [00:00<?, ?it/s]Loading weights: 100%|##########| 272/272 [00:00<00:00, 3800.01it/s]
+
+==============================================================================
+batch = 1
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 32
+  speculative rounds                  : 6
+  verify passes (batched)             : 6
+  verify passes (per-sequence)        : 6
+  verify passes saved                 : 0
+  all target passes (incl. prefill)   : 7
+  sequences verified per round        : 1.0
+  draft acceptance rate               : 0.6944
+  tokens per target pass  spec / plain: 4.571 / 1.0
+  wall-clock tok/s        spec / plain: 21.51 / 15.7  (1.37x)
+
+==============================================================================
+Verdict
+==============================================================================
+  - Lossless at every batch size: True.
+  - Batched verification saved verify passes in 0/0 multi-sequence configurations (a batch of one has nothing to batch).
+  - Peak sequences verified per target pass: 1.0. A per-sequence verifier would have needed that many passes per round, so this is the factor by which speculation and batching compose rather than conflict.
+  - Wall-clock speedup on this CPU: 1.37x-1.37x.
+  - Values below 1.0 are not a defect of the composition. The draft runs K passes serially per sequence per round, and this model pair (HuggingFaceTB/SmolLM2-360M-Instruct against HuggingFaceTB/SmolLM2-135M-Instruct) is too close in cost for that to pay.
+  - The plan's 2-3x claim is a GPU claim about a pair with a real cost gap, so it is neither confirmed nor refuted here. Re-run with --device cuda to measure it on a GPU.
+
+Wrote benchmarks\results\speculative_batching.json

@@ -1,0 +1,123 @@
+
+==============================================================================
+MemForge Phase C — does a long prompt stall in-flight decoding?
+==============================================================================
+model            : Qwen/Qwen2.5-1.5B-Instruct
+intruding prompt : 512 tokens
+victim           : 32-token prompt, 16 tokens generated
+budgets          : [0, 64, 16, 4]  (0 = unlimited, the old behaviour)
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  35%|###4      | 117/338 [00:00<00:00, 1146.77it/s]Loading weights:  69%|######8   | 232/338 [00:00<00:00, 1050.40it/s]Loading weights: 100%|##########| 338/338 [00:00<00:00, 1023.57it/s]Loading weights: 100%|##########| 338/338 [00:00<00:00, 1039.81it/s]
+
+==============================================================================
+prefill budget: unlimited tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 37.272 ms
+  median gap after       : 37.264 ms
+  p99 gap                : 128.529 ms  (3.45x the victim's own median)
+  worst gap              : 133.285 ms  (3.58x)
+  prefill chunks         : 2
+  fused steps            : 0
+  forward passes         : 17
+  intruder TTFT          : 133.3 ms
+
+==============================================================================
+prefill budget: 64 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 34.975 ms
+  median gap after       : 69.58 ms
+  p99 gap                : 75.154 ms  (2.15x the victim's own median)
+  worst gap              : 75.237 ms  (2.15x)
+  prefill chunks         : 9
+  fused steps            : 0
+  forward passes         : 24
+  intruder TTFT          : 568.7 ms
+
+==============================================================================
+prefill budget: 64 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 35.188 ms
+  median gap after       : 73.609 ms
+  p99 gap                : 80.957 ms  (2.3x the victim's own median)
+  worst gap              : 81.563 ms  (2.32x)
+  prefill chunks         : 9
+  fused steps            : 8
+  forward passes         : 16
+  intruder TTFT          : 600.2 ms
+
+==============================================================================
+prefill budget: 16 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 36.762 ms
+  median gap after       : 70.111 ms
+  p99 gap                : 78.132 ms  (2.13x the victim's own median)
+  worst gap              : 78.845 ms  (2.14x)
+  prefill chunks         : 34
+  fused steps            : 0
+  forward passes         : 50
+  intruder TTFT          : 1512.0 ms
+
+==============================================================================
+prefill budget: 16 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 37.173 ms
+  median gap after       : 71.354 ms
+  p99 gap                : 76.51 ms  (2.06x the victim's own median)
+  worst gap              : 76.758 ms  (2.06x)
+  prefill chunks         : 34
+  fused steps            : 12
+  forward passes         : 38
+  intruder TTFT          : 1551.4 ms
+
+==============================================================================
+prefill budget: 4 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 33.948 ms
+  median gap after       : 72.509 ms
+  p99 gap                : 81.607 ms  (2.4x the victim's own median)
+  worst gap              : 82.506 ms  (2.43x)
+  prefill chunks         : 136
+  fused steps            : 0
+  forward passes         : 152
+  intruder TTFT          : 4799.5 ms
+
+==============================================================================
+prefill budget: 4 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 39.125 ms
+  median gap after       : 74.326 ms
+  p99 gap                : 88.745 ms  (2.27x the victim's own median)
+  worst gap              : 89.963 ms  (2.3x)
+  prefill chunks         : 136
+  fused steps            : 12
+  forward passes         : 140
+  intruder TTFT          : 5021.1 ms
+
+==============================================================================
+Summary
+==============================================================================
+    budget  fused  median before       p99   p99 x     worst   worst x  chunks  passes
+ unlimited     no          37.27    128.53    3.45    133.28      3.58       2      17
+        64     no          34.98     75.15    2.15     75.24      2.15       9      24
+        64    yes          35.19     80.96    2.30     81.56      2.32       9      16
+        16     no          36.76     78.13    2.13     78.84      2.14      34      50
+        16    yes          37.17     76.51    2.06     76.76      2.06      34      38
+         4     no          33.95     81.61    2.40     82.51      2.43     136     152
+         4    yes          39.12     88.75    2.27     89.96      2.30     136     140
+
+Budget 64: fusing the 8 mixed steps took forward passes from 24 to 16, and the worst stall from 2.15x to 2.32x.
+
+Budget 16: fusing the 12 mixed steps took forward passes from 50 to 38, and the worst stall from 2.14x to 2.06x.
+
+Budget 4: fusing the 12 mixed steps took forward passes from 152 to 140, and the worst stall from 2.43x to 2.30x.
+
+Worst-case stall: 133.3 ms unlimited vs 76.8 ms at budget 16 (1.7x better)
+Phase C bullet 1 (chunked prefill): worst-case stall cut 1.7x, from 3.58x the victim's median to 2.06x at budget 16. Target NOT met, and the residual is understood. Without fusion the ratio asymptotes near 2.5x because a step carrying a chunk runs TWO forward passes, one for the chunk and one for the decode batch. Fusion (bullet 2) removes that second pass, and here it helped at 2/3 budgets and hurt at 1/3: budget 64 2.15x->2.32x, budget 16 2.14x->2.06x, budget 4 2.43x->2.30x. Removing a forward pass is not automatically a win: the fused pass still carries the chunk's tokens alongside the decode's one, and at larger model geometry that single wider pass can cost more than the two narrower ones it replaced.
+
+Wrote benchmarks\results\chunked_prefill.json

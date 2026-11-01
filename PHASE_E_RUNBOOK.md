@@ -10,6 +10,33 @@ is unfavourable, it says so — a report that only contains wins is not a report
 
 ---
 
+## ⚠ Corrections — superseded on 2026-11-01
+
+A campaign scaling the engine to a 1.5B target re-measured every claim below
+and **refuted or invalidated several of them**. Full detail, with the runs that
+produced it, is in **[MODEL_SCALE_REPORT.md](MODEL_SCALE_REPORT.md)**. Read
+these before trusting any number in §5.
+
+| § | claim here | status |
+|---|---|---|
+| §5.1 | the context-sweep table and its "Target MET on GPU" | ❌ **unsound.** Those figures are the median of **3** repeats against a **5%** threshold, with measured spread of 12–26%. The uncertainty was 4–5× the band tested, so the verdicts were coin flips. Two runs of the same build gave 0.955× and 0.865× at 512. The harness now uses warmup + 31 paired repeats + a bootstrap CI; the DoD **is** met at 2048, but only the new numbers support it |
+| §5.3 | "On GPU, chunking makes it worse" | ⚠️ **still untested at 1.5B.** An attempted refutation was **retracted**: the Qwen runs peaked at 9109 MB on a 6140 MiB card and measured host-memory thrash. Refit in progress |
+| §5.3 | Phase C on **CPU** | ✅ **DoD MET at 1.5B, and this is the campaign's best result.** Qwen2.5-1.5B, 512-token prompt, n=5: baseline stall **31.26x**, chunked+fused at budget 4 **1.52x** (range 1.39-1.56, entirely under the 2.0x target) = **20.6x improvement**. Fusion helps at every budget. The feature works; it needed a model big enough for the problem to exist |
+| §5.3 | the whole Phase C table | ⚠️ **noise-dominated.** `stall_ratio` is a *max* over inter-token gaps, and five repeats of one configuration span 1.62×–2.68× (41%). Single-run Phase C comparisons cannot distinguish the configurations they rank — here or in MODEL_SCALE_REPORT.md |
+| §5.3 | "With fusion … the floor drops to about 2x" | ⚠️ **unsupported, direction unknown.** Hardcoded narrative, now derived from the data instead; over five repeats fusion looks *worse* on SmolLM2 (2.42× vs 2.22× at budget 16), the opposite of the single run |
+| §3 | Qwen2.5-1.5B + 0.5B is "the realistic upgrade" for Phase D | ❌ **refuted.** The pair has the better cost ratio and performs *worse* — acceptance is **0.364** against SmolLM2's **0.656**, making it a net loss (0.940×). **Acceptance dominates cost ratio**; measure it before adopting a pair |
+| §5.4 | speculation is "verified lossless" | ⚠️ **true in fp32, unsound as stated in fp16.** The batched and unbatched decode paths are not bit-identical in half precision at batch ≥3 for `head_dim ≥ 128`. No algorithmic bug — fp32 is exact at every batch size and geometry — but byte-identity is not a sound assertion at the GPU default dtype |
+| §5.4 | the 2-3x speculation claim | ❌ **not met, and there is no win in any configuration.** With warmup discarded and 9 paired repeats: **0.818x** (SmolLM2) and **0.777x** (Qwen), CPU batch 1. Two earlier readings of 2.22x and 1.172x were both artifacts of the harness having no warmup iteration -- the plain arm ran first and absorbed model warmup, inflating the ratio 25-40%. Fixed; the harness now takes `--warmup` and `--repeats` |
+| §2 | "**Test state:** 398 Python tests" | ✅ still 398, all passing after five harness fixes |
+
+Also fixed, because each one could manufacture a wrong result: the harnesses had
+**no VRAM spill guard** (a sweep peaked at 6687 MB on a 6140 MiB card and
+reported PCIe-thrashed timings as `cuda` — a 3.06× artifact), the Phase A DoD
+check was **two-sided** so a 7% speedup counted as a failure, and `--self-draft`
+**printed a violated invariant and passed anyway**.
+
+---
+
 ## 1. What this project actually is
 
 MemForge is an **LLM inference engine written from scratch**. Not a wrapper
@@ -150,6 +177,27 @@ So the realistic upgrade is **`Qwen/Qwen2.5-1.5B-Instruct` +
 Be aware that is only a ~3× cost ratio against the current ~2.7×, so it is
 unlikely to flip speculation into a win — see §6.
 
+> **⚠ Measured on 2026-11-01: this pair is a downgrade for speculation, and the
+> reasoning above is the wrong reasoning.** Both pairs were run at batch 1 on
+> CPU in fp32, n=5:
+>
+> | pair | cost ratio | **acceptance** | median speedup (warmed, n=9) |
+> |---|---:|---:|---:|
+> | SmolLM2 360M ← 135M | 2.7x | **0.553** | **0.818x** |
+> | Qwen 1.5B ← 0.5B | 3.1x | **0.365** | **0.777x** |
+>
+> Neither pair wins on wall clock. The Qwen pair has the *better* cost ratio
+> and is still the worse of the two, because its draft agrees with its target
+> only 36% of the time. **Draft selection is governed by
+> acceptance, not by the parameter ratio** — a cheap draft that guesses wrong
+> makes the target re-run anyway and its K serial passes become pure overhead.
+> Same-family is not sufficient either: both pairs are same-family and differ by
+> nearly 2× in acceptance. Measure acceptance before adopting a pair.
+> See [MODEL_SCALE_REPORT.md](MODEL_SCALE_REPORT.md) §5.1b.
+>
+> The 1.5B pair *is* still the right choice for Phase A, B and C work, where it
+> improves every result — just not for Phase D.
+
 ### Hugging Face token (optional)
 
 Not needed for cached models. If you pull new ones and hit rate limits, get a
@@ -274,6 +322,16 @@ monopolises a step and every in-flight request skips a token.
 steps cost more than the stall they avoid). The benchmark now says so plainly
 instead of reporting "target met" — it used to compare only against the 2.0×
 threshold and never against the unchunked baseline.
+
+> **⚠ 2026-11-01: an attempt to refute this was RETRACTED, and the table above
+> is noise-dominated.** The Qwen-1.5B runs that appeared to refute it peaked at
+> **9109 MB on a 6140 MiB card** and were measuring host-memory thrash, not the
+> engine. Separately, repeating one SmolLM2 configuration five times gives a
+> baseline spanning **1.62×–2.68×** — `stall_ratio` is a *max* over inter-token
+> gaps, so it does not average out, and no single-run comparison here can
+> distinguish the budgets it ranks. **Treat the whole of §5.3 as unresolved**
+> until the refit at `--kv-budget-mb 256` with nine repeats lands.
+> See [MODEL_SCALE_REPORT.md](MODEL_SCALE_REPORT.md) §4 and §4a.
 
 **Read this as: chunking is a latency tool for the regime where prefill
 dominates.** That is CPU, or long prompts, or big models — not a small model on

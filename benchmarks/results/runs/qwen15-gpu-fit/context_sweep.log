@@ -1,0 +1,79 @@
+
+==============================================================================
+MemForge Phase A — paged vs contiguous across context lengths
+==============================================================================
+model       : Qwen/Qwen2.5-1.5B-Instruct
+contexts    : [128, 512, 1024, 2048]
+decode steps: 8 per run, 3 interleaved repeats
+block size  : 16
+device      : cuda:0 torch.float16 (torch 2.11.0+cu128)
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  30%|##9       | 101/338 [00:00<00:00, 971.15it/s]Loading weights:  59%|#####8    | 199/338 [00:00<00:00, 927.76it/s]Loading weights:  87%|########6 | 293/338 [00:00<00:00, 911.03it/s]Loading weights: 100%|##########| 338/338 [00:00<00:00, 947.97it/s]
+geometry    : 28 layers, 2 kv heads, head_dim 128, 28672 bytes/token
+
+==============================================================================
+context 128 tokens
+==============================================================================
+  repeat 1: contiguous  23.92 tok/s | paged  26.82 tok/s
+  repeat 2: contiguous  27.66 tok/s | paged  26.71 tok/s
+  repeat 3: contiguous  29.20 tok/s | paged  25.69 tok/s
+
+  median contiguous : 27.66 tok/s
+  median paged      : 26.71 tok/s
+  relative          : 0.966x   (within 5% of contiguous)
+  prefill median    : contiguous 0.041s | paged 0.048s
+  output identical  : YES
+
+==============================================================================
+context 512 tokens
+==============================================================================
+  repeat 1: contiguous  27.60 tok/s | paged  24.12 tok/s
+  repeat 2: contiguous  25.04 tok/s | paged  21.67 tok/s
+  repeat 3: contiguous  24.51 tok/s | paged  21.39 tok/s
+
+  median contiguous : 25.04 tok/s
+  median paged      : 21.67 tok/s
+  relative          : 0.865x   (outside 5% of contiguous)
+  prefill median    : contiguous 0.044s | paged 0.045s
+  output identical  : YES
+
+==============================================================================
+context 1024 tokens
+==============================================================================
+  repeat 1: contiguous  18.24 tok/s | paged  17.66 tok/s
+  repeat 2: contiguous  18.48 tok/s | paged  18.40 tok/s
+  repeat 3: contiguous  18.07 tok/s | paged  17.31 tok/s
+
+  median contiguous : 18.24 tok/s
+  median paged      : 17.66 tok/s
+  relative          : 0.968x   (within 5% of contiguous)
+  prefill median    : contiguous 0.099s | paged 0.110s
+  output identical  : YES
+
+==============================================================================
+context 2048 tokens
+==============================================================================
+  repeat 1: contiguous  11.31 tok/s | paged  11.66 tok/s
+  repeat 2: contiguous  11.93 tok/s | paged  11.44 tok/s
+  repeat 3: contiguous  11.42 tok/s | paged  11.67 tok/s
+
+  median contiguous : 11.42 tok/s
+  median paged      : 11.66 tok/s
+  relative          : 1.021x   (within 5% of contiguous)
+  prefill median    : contiguous 0.303s | paged 0.320s
+  output identical  : YES
+
+==============================================================================
+Summary
+==============================================================================
+  context   contiguous      paged   relative  within 5%  identical
+      128        27.66      26.71      0.966       True       True
+      512        25.04      21.67      0.865      False       True
+     1024        18.24      17.66      0.968       True       True
+     2048        11.42      11.66      1.021       True       True
+
+Worst case: 0.865x at 512 tokens.
+Phase A target (within 5% at 2048): MET
+
+Paged output byte-identical to contiguous at every context length.
+
+Wrote benchmarks\results\context_sweep.json

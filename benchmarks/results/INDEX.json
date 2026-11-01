@@ -1,0 +1,2506 @@
+{
+  "generated_at": "2026-11-01T22:29:15",
+  "runs": [
+    {
+      "label": "diag-bf16-gpu",
+      "file": "benchmarks/results/runs/diag-bf16-gpu/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:41:46",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "device": "cuda:0",
+      "dtype": "torch.bfloat16",
+      "peak_memory_mb": 4962.86,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 4,
+          "identical": true,
+          "speedup": 0.4,
+          "series": null,
+          "accept": 0.4583
+        }
+      ]
+    },
+    {
+      "label": "diag-repeat-gpu",
+      "file": "benchmarks/results/runs/diag-repeat-gpu/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:41:30",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 4960.03,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 4,
+          "identical": false,
+          "speedup": 0.382,
+          "series": null,
+          "accept": 0.4559
+        }
+      ]
+    },
+    {
+      "label": "diag-selfdraft-gpu",
+      "file": "benchmarks/results/runs/diag-selfdraft-gpu/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:41:13",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "(self)",
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 5032.38,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.356,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.57,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 4,
+          "identical": false,
+          "speedup": 0.368,
+          "series": null,
+          "accept": 0.9375
+        }
+      ]
+    },
+    {
+      "label": "diag2-realdraft-fp16",
+      "file": "benchmarks/results/runs/diag2-realdraft-fp16/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:46:01",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 8011.19,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 3,
+          "identical": true,
+          "speedup": 0.437,
+          "series": null,
+          "accept": 0.3833
+        },
+        {
+          "batch": 4,
+          "identical": false,
+          "speedup": 0.271,
+          "series": null,
+          "accept": 0.4559
+        },
+        {
+          "batch": 5,
+          "identical": false,
+          "speedup": 0.29,
+          "series": null,
+          "accept": 0.4875
+        },
+        {
+          "batch": 6,
+          "identical": false,
+          "speedup": 0.304,
+          "series": null,
+          "accept": 0.5543
+        },
+        {
+          "batch": 8,
+          "identical": false,
+          "speedup": 0.248,
+          "series": null,
+          "accept": 0.5234
+        }
+      ]
+    },
+    {
+      "label": "diag2-selfdraft-bf16",
+      "file": "benchmarks/results/runs/diag2-selfdraft-bf16/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:44:50",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "(self)",
+      "device": "cuda:0",
+      "dtype": "torch.bfloat16",
+      "peak_memory_mb": 6558.98,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.311,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.623,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 3,
+          "identical": true,
+          "speedup": 0.446,
+          "series": null,
+          "accept": 0.9722
+        },
+        {
+          "batch": 4,
+          "identical": false,
+          "speedup": 0.377,
+          "series": null,
+          "accept": 0.9792
+        },
+        {
+          "batch": 5,
+          "identical": false,
+          "speedup": 0.356,
+          "series": null,
+          "accept": 0.9167
+        },
+        {
+          "batch": 6,
+          "identical": false,
+          "speedup": 0.322,
+          "series": null,
+          "accept": 0.9167
+        },
+        {
+          "batch": 8,
+          "identical": false,
+          "speedup": 0.3,
+          "series": null,
+          "accept": 0.9375
+        }
+      ]
+    },
+    {
+      "label": "diag2-selfdraft-fp16",
+      "file": "benchmarks/results/runs/diag2-selfdraft-fp16/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:44:15",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "(self)",
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 6558.98,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.312,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.561,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 3,
+          "identical": true,
+          "speedup": 0.435,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 4,
+          "identical": false,
+          "speedup": 0.38,
+          "series": null,
+          "accept": 0.9375
+        },
+        {
+          "batch": 5,
+          "identical": false,
+          "speedup": 0.339,
+          "series": null,
+          "accept": 0.95
+        },
+        {
+          "batch": 6,
+          "identical": false,
+          "speedup": 0.319,
+          "series": null,
+          "accept": 0.9583
+        },
+        {
+          "batch": 8,
+          "identical": false,
+          "speedup": 0.301,
+          "series": null,
+          "accept": 0.9688
+        }
+      ]
+    },
+    {
+      "label": "diag2-selfdraft-smol-fp16",
+      "file": "benchmarks/results/runs/diag2-selfdraft-smol-fp16/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:45:24",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": "(self)",
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 5835.47,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.28,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.59,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 3,
+          "identical": true,
+          "speedup": 0.468,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 4,
+          "identical": true,
+          "speedup": 0.408,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 5,
+          "identical": true,
+          "speedup": 0.359,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 6,
+          "identical": true,
+          "speedup": 0.321,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 8,
+          "identical": true,
+          "speedup": 0.3,
+          "series": null,
+          "accept": 1.0
+        }
+      ]
+    },
+    {
+      "label": "diag3-selfdraft-cpu-fp32",
+      "file": "benchmarks/results/runs/diag3-selfdraft-cpu-fp32/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:49:42",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "(self)",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.566,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.62,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 3,
+          "identical": true,
+          "speedup": 0.485,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 4,
+          "identical": true,
+          "speedup": 0.408,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 6,
+          "identical": true,
+          "speedup": 0.319,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 8,
+          "identical": true,
+          "speedup": 0.344,
+          "series": null,
+          "accept": 1.0
+        }
+      ]
+    },
+    {
+      "label": "diag4-selfdraft-cpu-fp16",
+      "file": "benchmarks/results/runs/diag4-selfdraft-cpu-fp16/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:56:01",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "(self)",
+      "device": "cpu",
+      "dtype": "torch.float16",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.04,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.523,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 3,
+          "identical": false,
+          "speedup": 0.521,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 4,
+          "identical": false,
+          "speedup": 0.499,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 6,
+          "identical": false,
+          "speedup": 0.476,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 8,
+          "identical": false,
+          "speedup": 0.492,
+          "series": null,
+          "accept": 1.0
+        }
+      ]
+    },
+    {
+      "label": "diag5-q05-gpu-bf16",
+      "file": "benchmarks/results/runs/diag5-q05-gpu-bf16/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:58:31",
+      "model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "draft_model": "(self)",
+      "device": "cuda:0",
+      "dtype": "torch.bfloat16",
+      "peak_memory_mb": 5079.09,
+      "vram_spilled": false,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.625,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 2,
+          "identical": false,
+          "speedup": 0.629,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 3,
+          "identical": false,
+          "speedup": 0.506,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 4,
+          "identical": false,
+          "speedup": 0.416,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 6,
+          "identical": false,
+          "speedup": 0.358,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 8,
+          "identical": true,
+          "speedup": 0.308,
+          "series": null,
+          "accept": 0.9375
+        }
+      ]
+    },
+    {
+      "label": "diag5-q05-gpu-fp16",
+      "file": "benchmarks/results/runs/diag5-q05-gpu-fp16/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:57:43",
+      "model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "draft_model": "(self)",
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 5079.1,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.931,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.613,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 3,
+          "identical": true,
+          "speedup": 0.476,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 4,
+          "identical": true,
+          "speedup": 0.395,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 6,
+          "identical": true,
+          "speedup": 0.323,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 8,
+          "identical": true,
+          "speedup": 0.332,
+          "series": null,
+          "accept": 1.0
+        }
+      ]
+    },
+    {
+      "label": "diag5-q05-gpu-fp32",
+      "file": "benchmarks/results/runs/diag5-q05-gpu-fp32/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:58:07",
+      "model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "draft_model": "(self)",
+      "device": "cuda:0",
+      "dtype": "torch.float32",
+      "peak_memory_mb": 6066.21,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.696,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.685,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 3,
+          "identical": true,
+          "speedup": 0.547,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 4,
+          "identical": true,
+          "speedup": 0.418,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 6,
+          "identical": true,
+          "speedup": 0.402,
+          "series": null,
+          "accept": 1.0
+        },
+        {
+          "batch": 8,
+          "identical": true,
+          "speedup": 0.308,
+          "series": null,
+          "accept": 1.0
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-qwen15-cpu",
+      "file": "benchmarks/results/runs/phaseC-x5-qwen15-cpu/run1.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:19:56",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 31.23,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 6.66,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 5.92,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.59,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 1.99,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.33,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 1.5,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-qwen15-cpu",
+      "file": "benchmarks/results/runs/phaseC-x5-qwen15-cpu/run2.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:21:55",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 31.26,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 6.34,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 5.89,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.74,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 1.96,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.32,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 1.54,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-qwen15-cpu",
+      "file": "benchmarks/results/runs/phaseC-x5-qwen15-cpu/run3.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:23:53",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 31.7,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 6.31,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 5.8,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.77,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.05,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.28,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 1.52,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-qwen15-cpu",
+      "file": "benchmarks/results/runs/phaseC-x5-qwen15-cpu/run4.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:25:54",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 31.63,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 7.06,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 5.35,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.72,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.0,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.67,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 1.56,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-qwen15-cpu",
+      "file": "benchmarks/results/runs/phaseC-x5-qwen15-cpu/run5.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:27:42",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 29.39,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 6.43,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 5.57,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.83,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.0,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.32,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 1.39,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-qwen15-gpu",
+      "file": "benchmarks/results/runs/phaseC-x5-qwen15-gpu/run1.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:16:07",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 9109.01,
+      "vram_spilled": true,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 3.25,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 2.25,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 2.81,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 1.91,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.19,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.35,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 2.2,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-qwen15-gpu",
+      "file": "benchmarks/results/runs/phaseC-x5-qwen15-gpu/run2.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:16:37",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 9109.01,
+      "vram_spilled": true,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 3.69,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 1.9,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 3.12,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.55,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.3,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.24,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 2.09,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-qwen15-gpu",
+      "file": "benchmarks/results/runs/phaseC-x5-qwen15-gpu/run3.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:17:08",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 9109.01,
+      "vram_spilled": true,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 3.62,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 2.61,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 2.35,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.43,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 3.49,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.28,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 2.11,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-qwen15-gpu",
+      "file": "benchmarks/results/runs/phaseC-x5-qwen15-gpu/run4.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:17:40",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 9109.01,
+      "vram_spilled": true,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 3.64,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 2.11,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 2.55,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.77,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.44,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.17,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 2.55,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-qwen15-gpu",
+      "file": "benchmarks/results/runs/phaseC-x5-qwen15-gpu/run5.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:18:10",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 9109.01,
+      "vram_spilled": true,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 3.76,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 2.53,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 2.19,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.11,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 3.34,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.96,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 2.16,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-smol-gpu",
+      "file": "benchmarks/results/runs/phaseC-x5-smol-gpu/run1.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:13:43",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 4816.83,
+      "vram_spilled": false,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 2.68,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 3.33,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 2.9,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.75,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.61,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.11,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 2.13,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-smol-gpu",
+      "file": "benchmarks/results/runs/phaseC-x5-smol-gpu/run2.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:14:11",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 4816.83,
+      "vram_spilled": false,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 1.62,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 2.28,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 2.96,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.13,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.29,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 1.92,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 2.78,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-smol-gpu",
+      "file": "benchmarks/results/runs/phaseC-x5-smol-gpu/run3.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:14:39",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 4816.83,
+      "vram_spilled": false,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 2.56,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 2.26,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 3.32,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.22,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.42,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.85,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 2.45,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-smol-gpu",
+      "file": "benchmarks/results/runs/phaseC-x5-smol-gpu/run4.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:15:07",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 4816.83,
+      "vram_spilled": false,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 1.85,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 2.19,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 2.36,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.57,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.52,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.29,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 3.57,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseC-x5-smol-gpu",
+      "file": "benchmarks/results/runs/phaseC-x5-smol-gpu/run5.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T22:15:36",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 4816.83,
+      "vram_spilled": false,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 2.63,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 2.26,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 2.5,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.12,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.23,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.12,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 2.29,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "phaseD-batch1-qwen15",
+      "file": "benchmarks/results/runs/phaseD-batch1-qwen15/run1.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T22:11:33",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.101,
+          "series": null,
+          "accept": 0.3636
+        }
+      ]
+    },
+    {
+      "label": "phaseD-batch1-qwen15",
+      "file": "benchmarks/results/runs/phaseD-batch1-qwen15/run2.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T22:11:59",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.066,
+          "series": null,
+          "accept": 0.3636
+        }
+      ]
+    },
+    {
+      "label": "phaseD-batch1-qwen15",
+      "file": "benchmarks/results/runs/phaseD-batch1-qwen15/run3.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T22:12:23",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 0.937,
+          "series": null,
+          "accept": 0.3636
+        }
+      ]
+    },
+    {
+      "label": "phaseD-batch1-qwen15",
+      "file": "benchmarks/results/runs/phaseD-batch1-qwen15/run4.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T22:12:45",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 0.94,
+          "series": null,
+          "accept": 0.3636
+        }
+      ]
+    },
+    {
+      "label": "phaseD-batch1-qwen15",
+      "file": "benchmarks/results/runs/phaseD-batch1-qwen15/run5.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T22:13:07",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 0.882,
+          "series": null,
+          "accept": 0.3636
+        }
+      ]
+    },
+    {
+      "label": "phaseD-batch1-smol",
+      "file": "benchmarks/results/runs/phaseD-batch1-smol/run1.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T22:10:17",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.103,
+          "series": null,
+          "accept": 0.6562
+        }
+      ]
+    },
+    {
+      "label": "phaseD-batch1-smol",
+      "file": "benchmarks/results/runs/phaseD-batch1-smol/run2.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T22:10:30",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.172,
+          "series": null,
+          "accept": 0.6562
+        }
+      ]
+    },
+    {
+      "label": "phaseD-batch1-smol",
+      "file": "benchmarks/results/runs/phaseD-batch1-smol/run3.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T22:10:43",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.19,
+          "series": null,
+          "accept": 0.6562
+        }
+      ]
+    },
+    {
+      "label": "phaseD-batch1-smol",
+      "file": "benchmarks/results/runs/phaseD-batch1-smol/run4.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T22:10:56",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.197,
+          "series": null,
+          "accept": 0.6562
+        }
+      ]
+    },
+    {
+      "label": "phaseD-batch1-smol",
+      "file": "benchmarks/results/runs/phaseD-batch1-smol/run5.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T22:11:09",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.159,
+          "series": null,
+          "accept": 0.6562
+        }
+      ]
+    },
+    {
+      "label": "qwen15-cpu",
+      "file": "benchmarks/results/runs/qwen15-cpu/chunked_prefill.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T21:52:51",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 29.72,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 6.14,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 6.35,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.87,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.01,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.22,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 1.51,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "qwen15-cpu",
+      "file": "benchmarks/results/runs/qwen15-cpu/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:50:51",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 1.935,
+          "series": null,
+          "accept": 0.625
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.887,
+          "series": null,
+          "accept": 0.625
+        },
+        {
+          "batch": 4,
+          "identical": true,
+          "speedup": 0.59,
+          "series": null,
+          "accept": 0.5556
+        }
+      ]
+    },
+    {
+      "label": "qwen15-gpu-fit",
+      "file": "benchmarks/results/runs/qwen15-gpu-fit/context_sweep.json",
+      "benchmark": "context_sweep",
+      "phase": "A",
+      "generated_at": "2026-11-01T21:42:11",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 3748.7,
+      "vram_spilled": null,
+      "repeats": 3,
+      "warmup": null,
+      "results": [
+        {
+          "ctx": 128,
+          "rel": 0.9658,
+          "lo": null,
+          "hi": null,
+          "meets": true,
+          "decided": null,
+          "identical": true
+        },
+        {
+          "ctx": 512,
+          "rel": 0.8651,
+          "lo": null,
+          "hi": null,
+          "meets": false,
+          "decided": null,
+          "identical": true
+        },
+        {
+          "ctx": 1024,
+          "rel": 0.9682,
+          "lo": null,
+          "hi": null,
+          "meets": true,
+          "decided": null,
+          "identical": true
+        },
+        {
+          "ctx": 2048,
+          "rel": 1.0213,
+          "lo": null,
+          "hi": null,
+          "meets": true,
+          "decided": null,
+          "identical": true
+        }
+      ]
+    },
+    {
+      "label": "qwen15-gpu-v2",
+      "file": "benchmarks/results/runs/qwen15-gpu-v2/context_sweep.json",
+      "benchmark": "context_sweep",
+      "phase": "A",
+      "generated_at": "2026-11-01T21:59:31",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 4284.37,
+      "vram_spilled": false,
+      "repeats": 9,
+      "warmup": 2,
+      "results": [
+        {
+          "ctx": 128,
+          "rel": 0.8955,
+          "lo": 0.8855,
+          "hi": 1.003,
+          "meets": false,
+          "decided": false,
+          "identical": true
+        },
+        {
+          "ctx": 512,
+          "rel": 0.9572,
+          "lo": 0.8675,
+          "hi": 1.0668,
+          "meets": true,
+          "decided": false,
+          "identical": true
+        },
+        {
+          "ctx": 1024,
+          "rel": 0.963,
+          "lo": 0.893,
+          "hi": 1.0057,
+          "meets": true,
+          "decided": false,
+          "identical": true
+        },
+        {
+          "ctx": 2048,
+          "rel": 1.0123,
+          "lo": 0.9567,
+          "hi": 1.0679,
+          "meets": true,
+          "decided": true,
+          "identical": true
+        }
+      ]
+    },
+    {
+      "label": "qwen15-gpu-v3",
+      "file": "benchmarks/results/runs/qwen15-gpu-v3/context_sweep.json",
+      "benchmark": "context_sweep",
+      "phase": "A",
+      "generated_at": "2026-11-01T22:04:17",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 4539.95,
+      "vram_spilled": false,
+      "repeats": 31,
+      "warmup": 3,
+      "results": [
+        {
+          "ctx": 128,
+          "rel": 0.8969,
+          "lo": 0.879,
+          "hi": 0.9201,
+          "meets": false,
+          "decided": true,
+          "identical": true
+        },
+        {
+          "ctx": 512,
+          "rel": 0.9231,
+          "lo": 0.9013,
+          "hi": 0.9467,
+          "meets": false,
+          "decided": true,
+          "identical": true
+        },
+        {
+          "ctx": 1024,
+          "rel": 0.9506,
+          "lo": 0.9265,
+          "hi": 0.9767,
+          "meets": true,
+          "decided": false,
+          "identical": true
+        },
+        {
+          "ctx": 2048,
+          "rel": 1.0116,
+          "lo": 0.996,
+          "hi": 1.0255,
+          "meets": true,
+          "decided": true,
+          "identical": true
+        }
+      ]
+    },
+    {
+      "label": "qwen15-gpu",
+      "file": "benchmarks/results/runs/qwen15-gpu/chunked_prefill.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T21:39:09",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 9109.01,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 3.54,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 2.3,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 3.55,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.18,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.52,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.18,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 2.4,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "qwen15-gpu",
+      "file": "benchmarks/results/runs/qwen15-gpu/context_sweep.json",
+      "benchmark": "context_sweep",
+      "phase": "A",
+      "generated_at": "2026-11-01T21:37:42",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 6687.65,
+      "vram_spilled": null,
+      "repeats": 3,
+      "warmup": null,
+      "results": [
+        {
+          "ctx": 128,
+          "rel": 0.9518,
+          "lo": null,
+          "hi": null,
+          "meets": true,
+          "decided": null,
+          "identical": true
+        },
+        {
+          "ctx": 512,
+          "rel": 0.9547,
+          "lo": null,
+          "hi": null,
+          "meets": true,
+          "decided": null,
+          "identical": true
+        },
+        {
+          "ctx": 1024,
+          "rel": 0.8797,
+          "lo": null,
+          "hi": null,
+          "meets": false,
+          "decided": null,
+          "identical": true
+        },
+        {
+          "ctx": 2048,
+          "rel": 1.0712,
+          "lo": null,
+          "hi": null,
+          "meets": false,
+          "decided": null,
+          "identical": true
+        }
+      ]
+    },
+    {
+      "label": "qwen15-gpu",
+      "file": "benchmarks/results/runs/qwen15-gpu/prefix_sharing.json",
+      "benchmark": "prefix_sharing",
+      "phase": "B",
+      "generated_at": "2026-11-01T21:38:09",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 3747.64,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "N": 1,
+          "block_ratio": 1.0,
+          "prefill_ratio": 1.0,
+          "identical": true,
+          "leaked": 0,
+          "cow": 0
+        },
+        {
+          "N": 4,
+          "block_ratio": 0.3333,
+          "prefill_ratio": 0.27,
+          "identical": true,
+          "leaked": 0,
+          "cow": 0
+        }
+      ]
+    },
+    {
+      "label": "qwen15-gpu",
+      "file": "benchmarks/results/runs/qwen15-gpu/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:39:49",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 6496.04,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 0.86,
+          "series": null,
+          "accept": 0.2917
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.384,
+          "series": null,
+          "accept": 0.4444
+        },
+        {
+          "batch": 4,
+          "identical": false,
+          "speedup": 0.318,
+          "series": null,
+          "accept": 0.4559
+        }
+      ]
+    },
+    {
+      "label": "qwen15-gpu",
+      "file": "benchmarks/results/runs/qwen15-gpu/stress_test.json",
+      "benchmark": "stress_test",
+      "phase": "F",
+      "generated_at": "2026-11-01T22:10:04",
+      "model": null,
+      "draft_model": null,
+      "device": null,
+      "dtype": null,
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": 5,
+      "results": []
+    },
+    {
+      "label": "smol-cpu",
+      "file": "benchmarks/results/runs/smol-cpu/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:50:19",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+      "device": "cpu",
+      "dtype": "torch.float32",
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 2.218,
+          "series": null,
+          "accept": 0.5
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.749,
+          "series": null,
+          "accept": 0.7
+        },
+        {
+          "batch": 4,
+          "identical": true,
+          "speedup": 0.532,
+          "series": null,
+          "accept": 0.6364
+        }
+      ]
+    },
+    {
+      "label": "smol-gpu-v3",
+      "file": "benchmarks/results/runs/smol-gpu-v3/context_sweep.json",
+      "benchmark": "context_sweep",
+      "phase": "A",
+      "generated_at": "2026-11-01T22:06:53",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 2524.94,
+      "vram_spilled": false,
+      "repeats": 31,
+      "warmup": 3,
+      "results": [
+        {
+          "ctx": 128,
+          "rel": 0.8733,
+          "lo": 0.8672,
+          "hi": 0.8921,
+          "meets": false,
+          "decided": true,
+          "identical": true
+        },
+        {
+          "ctx": 512,
+          "rel": 0.8941,
+          "lo": 0.8839,
+          "hi": 0.9119,
+          "meets": false,
+          "decided": true,
+          "identical": true
+        },
+        {
+          "ctx": 1024,
+          "rel": 0.9234,
+          "lo": 0.9031,
+          "hi": 0.9302,
+          "meets": false,
+          "decided": true,
+          "identical": true
+        },
+        {
+          "ctx": 2048,
+          "rel": 0.9802,
+          "lo": 0.9641,
+          "hi": 0.9862,
+          "meets": true,
+          "decided": true,
+          "identical": true
+        }
+      ]
+    },
+    {
+      "label": "smol-gpu",
+      "file": "benchmarks/results/runs/smol-gpu/chunked_prefill.json",
+      "benchmark": "chunked_prefill",
+      "phase": "C",
+      "generated_at": "2026-11-01T21:38:38",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 4816.83,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "budget": 0,
+          "fused": false,
+          "stall": 2.48,
+          "passes": 17
+        },
+        {
+          "budget": 64,
+          "fused": false,
+          "stall": 3.04,
+          "passes": 24
+        },
+        {
+          "budget": 64,
+          "fused": true,
+          "stall": 3.71,
+          "passes": 16
+        },
+        {
+          "budget": 16,
+          "fused": false,
+          "stall": 2.53,
+          "passes": 50
+        },
+        {
+          "budget": 16,
+          "fused": true,
+          "stall": 2.15,
+          "passes": 38
+        },
+        {
+          "budget": 4,
+          "fused": false,
+          "stall": 2.5,
+          "passes": 152
+        },
+        {
+          "budget": 4,
+          "fused": true,
+          "stall": 2.24,
+          "passes": 140
+        }
+      ]
+    },
+    {
+      "label": "smol-gpu",
+      "file": "benchmarks/results/runs/smol-gpu/context_sweep.json",
+      "benchmark": "context_sweep",
+      "phase": "A",
+      "generated_at": "2026-11-01T21:35:49",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 4599.2,
+      "vram_spilled": null,
+      "repeats": 3,
+      "warmup": null,
+      "results": [
+        {
+          "ctx": 128,
+          "rel": 0.8929,
+          "lo": null,
+          "hi": null,
+          "meets": false,
+          "decided": null,
+          "identical": true
+        },
+        {
+          "ctx": 512,
+          "rel": 0.8684,
+          "lo": null,
+          "hi": null,
+          "meets": false,
+          "decided": null,
+          "identical": true
+        },
+        {
+          "ctx": 1024,
+          "rel": 0.9811,
+          "lo": null,
+          "hi": null,
+          "meets": true,
+          "decided": null,
+          "identical": true
+        },
+        {
+          "ctx": 2048,
+          "rel": 0.9697,
+          "lo": null,
+          "hi": null,
+          "meets": true,
+          "decided": null,
+          "identical": true
+        }
+      ]
+    },
+    {
+      "label": "smol-gpu",
+      "file": "benchmarks/results/runs/smol-gpu/prefix_sharing.json",
+      "benchmark": "prefix_sharing",
+      "phase": "B",
+      "generated_at": "2026-11-01T21:37:56",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": null,
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 1840.69,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "N": 1,
+          "block_ratio": 1.0,
+          "prefill_ratio": 1.0,
+          "identical": true,
+          "leaked": 0,
+          "cow": 0
+        },
+        {
+          "N": 4,
+          "block_ratio": 0.3333,
+          "prefill_ratio": 0.27,
+          "identical": true,
+          "leaked": 0,
+          "cow": 0
+        }
+      ]
+    },
+    {
+      "label": "smol-gpu",
+      "file": "benchmarks/results/runs/smol-gpu/speculative_batching.json",
+      "benchmark": "speculative_batching",
+      "phase": "D",
+      "generated_at": "2026-11-01T21:39:28",
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "draft_model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+      "device": "cuda:0",
+      "dtype": "torch.float16",
+      "peak_memory_mb": 3564.35,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": null,
+      "results": [
+        {
+          "batch": 1,
+          "identical": true,
+          "speedup": 0.97,
+          "series": null,
+          "accept": 0.625
+        },
+        {
+          "batch": 2,
+          "identical": true,
+          "speedup": 0.475,
+          "series": null,
+          "accept": 0.6429
+        },
+        {
+          "batch": 4,
+          "identical": true,
+          "speedup": 0.318,
+          "series": null,
+          "accept": 0.6
+        }
+      ]
+    },
+    {
+      "label": "smol-gpu",
+      "file": "benchmarks/results/runs/smol-gpu/stress_test.json",
+      "benchmark": "stress_test",
+      "phase": "F",
+      "generated_at": "2026-11-01T22:08:59",
+      "model": null,
+      "draft_model": null,
+      "device": null,
+      "dtype": null,
+      "peak_memory_mb": null,
+      "vram_spilled": null,
+      "repeats": null,
+      "warmup": 5,
+      "results": []
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+
+==============================================================================
+Phase D - speculative decoding inside continuous batching
+==============================================================================
+target model : Qwen/Qwen2.5-1.5B-Instruct
+draft model  : (self)
+lookahead K  : 4  (scheduler reserves K+1 = 5 slots per sequence per step)
+device       : cuda:0 torch.float16
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  33%|###2      | 111/338 [00:00<00:00, 1072.28it/s]Loading weights:  65%|######4   | 219/338 [00:00<00:00, 1017.75it/s]Loading weights:  95%|#########4| 321/338 [00:00<00:00, 923.18it/s] Loading weights: 100%|##########| 338/338 [00:00<00:00, 968.77it/s]
+
+==============================================================================
+batch = 1
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 16
+  speculative rounds                  : 3
+  verify passes (batched)             : 3
+  verify passes (per-sequence)        : 3
+  verify passes saved                 : 0
+  all target passes (incl. prefill)   : 4
+  sequences verified per round        : 1.0
+  draft acceptance rate               : 1.0
+  tokens per target pass  spec / plain: 4.0 / 1.0
+  wall-clock tok/s        spec / plain: 21.6 / 15.93  (1.36x)
+
+==============================================================================
+batch = 2
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 32
+  speculative rounds                  : 3
+  verify passes (batched)             : 3
+  verify passes (per-sequence)        : 6
+  verify passes saved                 : 3
+  all target passes (incl. prefill)   : 5
+  sequences verified per round        : 2.0
+  draft acceptance rate               : 1.0
+  tokens per target pass  spec / plain: 6.4 / 1.882
+  wall-clock tok/s        spec / plain: 25.11 / 44.08  (0.57x)
+
+==============================================================================
+batch = 4
+==============================================================================
+  output identical to non-speculative : False
+  !! speculation changed the output -- the numbers below are void
+  tokens generated                    : 64
+  speculative rounds                  : 3
+  verify passes (batched)             : 3
+  verify passes (per-sequence)        : 12
+  verify passes saved                 : 9
+  all target passes (incl. prefill)   : 10
+  sequences verified per round        : 4.0
+  draft acceptance rate               : 0.9375
+  tokens per target pass  spec / plain: 6.4 / 3.368
+  wall-clock tok/s        spec / plain: 24.75 / 67.19  (0.37x)
+
+==============================================================================
+Verdict
+==============================================================================
+  - Lossless at every batch size: False.
+  - Batched verification saved verify passes in 2/2 multi-sequence configurations (a batch of one has nothing to batch).
+  - Peak sequences verified per target pass: 4.0. A per-sequence verifier would have needed that many passes per round, so this is the factor by which speculation and batching compose rather than conflict.
+  - Wall-clock speedup on NVIDIA GeForce RTX 4050 Laptop GPU: 0.37x-1.36x.
+  - Values below 1.0 are not a defect of the composition. The draft runs K passes serially per sequence per round, and this model pair (Qwen/Qwen2.5-1.5B-Instruct against itself) is too close in cost for that to pay.
+  - Note that this is *worse* on GPU than on CPU, which is the expected direction: a single target pass on a GPU is latency-bound rather than compute-bound, so it is already cheap, and the draft's serial passes dominate a larger share of the round. Speculation needs the target pass to be genuinely expensive before skipping some of them pays -- that means a much larger target, not merely a faster device.
+  - So the plan's 2-3x claim is still neither confirmed nor refuted: it is about an 8B-class target, and this GPU has 6.0 GB of VRAM, which will not hold one in fp16.
+
+Wrote benchmarks\results\speculative_batching.json

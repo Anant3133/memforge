@@ -1,0 +1,1282 @@
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   __  __                  ______                                            │
+│  |  \/  |                |  ____|                                           │
+│  | \  / | ___ _ __ ___   | |__ ___  _ __ __ _  ___                          │
+│  | |\/| |/ _ \ '_ ` _ \  |  __/ _ \| '__/ _` |/ _ \                         │
+│  | |  | |  __/ | | | | | | | | (_) | | | (_| |  __/                         │
+│  |_|  |_|\___|_| |_| |_| |_|  \___/|_|  \__, |\___|                         │
+│                                          __/ |                              │
+│     Custom High-Performance LLM Engine  |___/                               │
+│     PagedAttention * Continuous Batching * Speculative Decoding             │
+│                                                                             │
+└────────────────────── Pipeline Test & Benchmark Suite ──────────────────────┘
+┌──────────────────────────── System Environment ─────────────────────────────┐
+│ Python Version:     3.12.7                                                  │
+│ PyTorch Version:    2.11.0+cu128                                            │
+│ Compute Device:     NVIDIA GeForce RTX 4050 Laptop GPU (CUDA: True)         │
+│ Working Directory:  C:\Users\Anant\memforge                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+───────────────────── Stage 1: C++ Core Engine Unit Tests ─────────────────────
+Building & running test_block_allocator...
+  [PASS] BlockAllocator (Physical Memory Pool & Boundary Growth) passed.
+Building & running test_scheduler...
+  [PASS] Scheduler (Continuous Batching Iteration Loop) passed.
+Building & running test_prefix_cache...
+  [PASS] PrefixCache (Chained Hashing, Sharing & Copy-on-Write) passed.
+
+────────────── Stage 2: Native pybind11 C++ Bridge Verification ───────────────
+  [PASS] Successfully imported native memforge_c binary module.
+  [PASS] C++ BlockAllocator instantiated in Python: 256 blocks (4096 tokens 
+capacity).
+  [PASS] C++ Block allocation & deallocation cycle verified via Python.
+  [PASS] C++ Continuous Scheduler step execution verified via Python.
+
+─────────────── Stage 3: ML Operators & API Test Suite (pytest) ───────────────
+  [PASS] tests/python/test_api_stream.py::test_health_check_endpoint PASSED    
+[  0%]
+  [PASS] tests/python/test_api_stream.py::test_models_endpoint PASSED          
+[  0%]
+  [PASS] 
+tests/python/test_api_stream.py::test_status_endpoint_reports_configuration 
+PASSED [  0%]
+  [PASS] 
+tests/python/test_api_stream.py::test_telemetry_endpoint_returns_503_before_the
+_engine_loads PASSED [  1%]
+  [PASS] 
+tests/python/test_api_stream.py::test_telemetry_endpoint_reports_pool_state 
+PASSED [  1%]
+  [PASS] 
+tests/python/test_api_stream.py::test_blocks_endpoint_returns_an_occupancy_map 
+PASSED [  1%]
+  [PASS] tests/python/test_api_stream.py::test_chat_completions_endpoint PASSED
+[  1%]
+  [PASS] tests/python/test_api_stream.py::test_completions_endpoint PASSED     
+[  2%]
+  [PASS] 
+tests/python/test_api_stream.py::test_chat_completions_streams_sse_chunks 
+PASSED [  2%]
+  [PASS] 
+tests/python/test_api_stream.py::test_concurrent_requests_are_interleaved_by_th
+e_scheduler PASSED [  2%]
+  [PASS] 
+tests/python/test_api_stream.py::test_speculative_request_is_rejected_when_unav
+ailable PASSED [  2%]
+  [PASS] tests/python/test_api_stream.py::test_oversized_prompt_returns_400 
+PASSED [  3%]
+  [PASS] 
+tests/python/test_api_stream.py::test_websocket_stream_emits_tokens_then_done 
+PASSED [  3%]
+  [PASS] 
+tests/python/test_api_stream.py::test_websocket_rejects_an_empty_prompt PASSED 
+[  3%]
+  [PASS] 
+tests/python/test_api_stream.py::test_websocket_telemetry_feed_pushes_engine_st
+ate PASSED [  3%]
+  [PASS] 
+tests/python/test_attention_backend.py::test_register_is_idempotent_and_registe
+rs_a_mask_builder PASSED [  4%]
+  [PASS] 
+tests/python/test_attention_backend.py::test_enable_and_detect_on_a_model 
+PASSED [  4%]
+  [PASS] 
+tests/python/test_attention_backend.py::test_prefill_matches_eager_exactly 
+PASSED [  4%]
+  [PASS] 
+tests/python/test_attention_backend.py::test_decode_matches_eager_and_every_lay
+er_uses_the_kernel PASSED [  4%]
+  [PASS] 
+tests/python/test_attention_backend.py::test_binding_reads_the_context_length_a
+fter_the_write PASSED [  5%]
+  [PASS] tests/python/test_attention_backend.py::test_bindings_nest_and_restore
+PASSED [  5%]
+  [PASS] 
+tests/python/test_attention_backend.py::test_no_binding_falls_back_cleanly 
+PASSED [  5%]
+  [PASS] tests/python/test_attention_backend.py::test_mask_permissiveness_check
+PASSED [  5%]
+  [PASS] 
+tests/python/test_attention_backend.py::test_implicit_causal_mask_matches_an_ex
+plicit_one PASSED [  6%]
+  [PASS] 
+tests/python/test_attention_backend.py::test_eager_fallback_matches_transformer
+s PASSED [  6%]
+  [PASS] 
+tests/python/test_attention_backend.py::test_engine_block_attention_is_byte_ide
+ntical PASSED [  6%]
+  [PASS] 
+tests/python/test_attention_backend.py::test_engine_refuses_mirror_and_block_at
+tention_together PASSED [  6%]
+  [PASS] 
+tests/python/test_attention_backend.py::test_lazy_read_rejects_a_mirror_capacit
+y PASSED [  7%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_batched_verification_matches_per
+_sequence[contexts0] PASSED [  7%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_batched_verification_matches_per
+_sequence[contexts1] PASSED [  7%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_batched_verification_matches_per
+_sequence[contexts2] PASSED [  7%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_batched_verification_new_kv_has_
+query_width PASSED [  8%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_batched_verification_rejects_rag
+ged_candidate_counts PASSED [  8%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_batched_verification_rejects_emp
+ty_batch PASSED [  8%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_candidate_logits_ignore_later_ca
+ndidates PASSED [  8%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_padding_does_not_change_a_sequen
+ce_result PASSED [  9%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_greedy_round_accepts_every_corre
+ct_candidate PASSED [  9%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_greedy_round_truncates_at_first_
+wrong_candidate PASSED [  9%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_greedy_round_with_useless_draft_
+still_yields_target_token PASSED [  9%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_greedy_round_confirms_target_arg
+max_sequence PASSED [ 10%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_sampled_round_never_exceeds_look
+ahead_plus_one PASSED [ 10%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_scatter_writes_only_the_confirme
+d_prefix PASSED [ 10%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_scatter_round_trips_through_the_
+pool PASSED [ 10%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_scatter_of_nothing_is_a_no_op 
+PASSED [ 11%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_proposal_returns_lookahead_candi
+dates_and_probs PASSED [ 11%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_proposal_catches_up_multiple_con
+firmed_tokens_in_one_pass PASSED [ 11%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_proposal_refuses_when_draft_is_a
+lready_current PASSED [ 11%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_draft_state_reset_forgets_the_ca
+che PASSED [ 12%]
+  [PASS] 
+tests/python/test_batched_speculative.py::test_full_speculative_round_over_a_ba
+tch PASSED [ 12%]
+  [PASS] 
+tests/python/test_block_attention.py::test_matches_reference_across_context_len
+gths[1] PASSED [ 12%]
+  [PASS] 
+tests/python/test_block_attention.py::test_matches_reference_across_context_len
+gths[3] PASSED [ 12%]
+  [PASS] 
+tests/python/test_block_attention.py::test_matches_reference_across_context_len
+gths[4] PASSED [ 13%]
+  [PASS] 
+tests/python/test_block_attention.py::test_matches_reference_across_context_len
+gths[5] PASSED [ 13%]
+  [PASS] 
+tests/python/test_block_attention.py::test_matches_reference_across_context_len
+gths[8] PASSED [ 13%]
+  [PASS] 
+tests/python/test_block_attention.py::test_matches_reference_across_context_len
+gths[13] PASSED [ 13%]
+  [PASS] 
+tests/python/test_block_attention.py::test_matches_reference_across_context_len
+gths[16] PASSED [ 14%]
+  [PASS] 
+tests/python/test_block_attention.py::test_matches_reference_across_context_len
+gths[31] PASSED [ 14%]
+  [PASS] 
+tests/python/test_block_attention.py::test_matches_reference_across_context_len
+gths[64] PASSED [ 14%]
+  [PASS] 
+tests/python/test_block_attention.py::test_matches_reference_with_a_scattered_b
+lock_table PASSED [ 14%]
+  [PASS] 
+tests/python/test_block_attention.py::test_grouped_query_attention[2-2] PASSED 
+[ 15%]
+  [PASS] 
+tests/python/test_block_attention.py::test_grouped_query_attention[2-4] PASSED 
+[ 15%]
+  [PASS] 
+tests/python/test_block_attention.py::test_grouped_query_attention[2-8] PASSED 
+[ 15%]
+  [PASS] 
+tests/python/test_block_attention.py::test_grouped_query_attention[5-15] PASSED
+[ 15%]
+  [PASS] tests/python/test_block_attention.py::test_custom_scale_is_honoured 
+PASSED [ 16%]
+  [PASS] 
+tests/python/test_block_attention.py::test_is_numerically_stable_with_large_sco
+res PASSED [ 16%]
+  [PASS] 
+tests/python/test_block_attention.py::test_single_block_and_single_token PASSED
+[ 16%]
+  [PASS] tests/python/test_block_attention.py::test_rejects_bad_inputs PASSED  
+[ 16%]
+  [PASS] 
+tests/python/test_block_attention.py::test_working_memory_is_independent_of_con
+text PASSED [ 17%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_chunking_does_not_change_the_output[
+64] PASSED [ 17%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_chunking_does_not_change_the_output[
+32] PASSED [ 17%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_chunking_does_not_change_the_output[
+16] PASSED [ 17%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_chunking_does_not_change_the_output[
+8] PASSED [ 18%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_chunking_does_not_change_the_output[
+4] PASSED [ 18%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_chunking_does_not_change_the_output[
+1] PASSED [ 18%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_chunking_composes_with_prefix_sharin
+g PASSED [ 18%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_chunking_composes_with_sequential_de
+code PASSED [ 19%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_short_prompt_under_budget_is_unchunk
+ed PASSED [ 19%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_chunk_count_matches_the_budget 
+PASSED [ 19%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_telemetry_reports_the_configuration 
+PASSED [ 19%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_a_long_prompt_does_not_starve_an_in_
+flight_decode PASSED [ 20%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_unchunked_prefill_blocks_a_step 
+PASSED [ 20%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_scheduler_reports_chunk_bounds 
+PASSED [ 20%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_scheduler_unlimited_budget_is_one_ch
+unk PASSED [ 20%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_budget_is_shared_across_concurrent_p
+refills PASSED [ 21%]
+  [PASS] 
+tests/python/test_chunked_prefill.py::test_zero_length_chunk_is_reported_when_t
+he_budget_runs_out PASSED [ 21%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_generates_the_requested_number_of_
+tokens PASSED [ 21%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_batched_decode_matches_sequential_
+decode PASSED [ 21%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_batching_needs_fewer_forward_passe
+s_than_tokens PASSED [ 22%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_blocks_are_fully_reclaimed_after_r
+equests_finish PASSED [ 22%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_requests_can_join_while_others_are
+_running PASSED [ 22%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_sequence_survives_preemption_and_s
+till_completes PASSED [ 22%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_preempted_output_matches_an_unpres
+sured_run PASSED [ 23%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_oversized_request_is_rejected_at_s
+ubmit PASSED [ 23%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_max_new_tokens_is_clamped_to_the_c
+ontext_window PASSED [ 23%]
+  [PASS] tests/python/test_continuous_engine.py::test_empty_prompt_is_rejected 
+PASSED [ 23%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_abort_stops_a_sequence_and_frees_i
+ts_memory PASSED [ 24%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_eos_stops_generation_early PASSED 
+[ 24%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_seeded_sampling_is_reproducible 
+PASSED [ 24%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_block_occupancy_maps_blocks_to_the
+ir_owners PASSED [ 24%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_telemetry_reports_pool_geometry_an
+d_counters PASSED [ 25%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_describe_exposes_the_engine_config
+uration PASSED [ 25%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_block_attention_actually_runs_unde
+r_batched_decode PASSED [ 25%]
+  [PASS] 
+tests/python/test_continuous_engine.py::test_block_attention_does_not_reroute_t
+he_model_permanently PASSED [ 25%]
+  [PASS] 
+tests/python/test_decode_view_cache.py::test_capacity_is_sized_from_the_request
+_not_the_model_limit PASSED [ 26%]
+  [PASS] 
+tests/python/test_decode_view_cache.py::test_rejects_a_non_positive_capacity 
+PASSED [ 26%]
+  [PASS] tests/python/test_decode_view_cache.py::test_reports_its_own_cost 
+PASSED [ 26%]
+  [PASS] 
+tests/python/test_decode_view_cache.py::test_append_then_view_round_trips 
+PASSED [ 26%]
+  [PASS] 
+tests/python/test_decode_view_cache.py::test_view_aliases_the_buffer_rather_tha
+n_copying PASSED [ 27%]
+  [PASS] 
+tests/python/test_decode_view_cache.py::test_filled_advances_only_once_every_la
+yer_has_written PASSED [ 27%]
+  [PASS] 
+tests/python/test_decode_view_cache.py::test_unwritten_positions_read_as_zero 
+PASSED [ 27%]
+  [PASS] tests/python/test_decode_view_cache.py::test_seed_matches_a_pool_read 
+PASSED [ 27%]
+  [PASS] 
+tests/python/test_decode_view_cache.py::test_seed_handles_a_scattered_block_tab
+le PASSED [ 28%]
+  [PASS] tests/python/test_decode_view_cache.py::test_rejects_overflow PASSED  
+[ 28%]
+  [PASS] tests/python/test_decode_view_cache.py::test_truncate_and_reset PASSED
+[ 28%]
+  [PASS] 
+tests/python/test_decode_view_cache.py::test_enabling_the_mirror_does_not_chang
+e_a_single_logit PASSED [ 28%]
+  [PASS] 
+tests/python/test_decode_view_cache.py::test_mirror_is_reseeded_after_a_block_t
+able_change PASSED [ 29%]
+  [PASS] 
+tests/python/test_decode_view_cache.py::test_rollback_keeps_the_mirror_consiste
+nt_with_the_cache PASSED [ 29%]
+  [PASS] 
+tests/python/test_decode_view_cache.py::test_seed_position_fills_the_mirror_for
+_a_prefix_hit PASSED [ 29%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_prompt_over_max_model_len_is_rejected
+PASSED [ 29%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_oversized_prompt_leaves_no_blocks_beh
+ind PASSED [ 30%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_prompt_exactly_at_the_limit_is_accept
+ed PASSED [ 30%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_malformed_chat_bodies_are_422[body0] 
+PASSED [ 30%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_malformed_chat_bodies_are_422[body1] 
+PASSED [ 30%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_malformed_chat_bodies_are_422[body2] 
+PASSED [ 31%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_malformed_chat_bodies_are_422[body3] 
+PASSED [ 31%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_non_positive_max_tokens_is_422[0] 
+PASSED [ 31%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_non_positive_max_tokens_is_422[-1] 
+PASSED [ 31%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_non_positive_max_tokens_is_422[-100] 
+PASSED [ 32%]
+  [PASS] tests/python/test_edge_scenarios.py::test_unparseable_body_is_422 
+PASSED [ 32%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_saturation_mixes_200_and_429_without_
+500s PASSED [ 32%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_capacity_is_released_after_saturation
+PASSED [ 32%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_requests_complete_under_memory_pressu
+re PASSED [ 33%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_websocket_rejects_empty_prompt_and_st
+ays_open PASSED [ 33%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_websocket_survives_malformed_json 
+PASSED [ 33%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_websocket_rejects_a_json_array PASSED
+[ 33%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_websocket_rejects_invalid_sampling_pa
+rams PASSED [ 34%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_websocket_missing_prompt_field PASSED
+[ 34%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_many_sequential_requests_do_not_leak 
+PASSED [ 34%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_streaming_requests_do_not_leak PASSED
+[ 34%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_unicode_prompts_round_trip[cafe\u0301
+na\xefve] PASSED [ 35%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_unicode_prompts_round_trip[\u4f60\u59
+7d\u4e16\u754c] PASSED [ 35%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_unicode_prompts_round_trip[\U0001f600
+\U0001f680] PASSED [ 35%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_unicode_prompts_round_trip[\u0645\u06
+31\u062d\u0628\u0627] PASSED [ 35%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_unicode_prompts_round_trip[mixed 
+\U0001f44d text \xe9\xe0] PASSED [ 36%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_identical_concurrent_prompts_share_bl
+ocks PASSED [ 36%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_blocks_endpoint_agrees_with_telemetry
+PASSED [ 36%]
+  [PASS] 
+tests/python/test_edge_scenarios.py::test_telemetry_is_503_before_the_engine_lo
+ads PASSED [ 36%]
+  [PASS] tests/python/test_edge_scenarios.py::test_health_reports_load_failure 
+PASSED [ 37%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_fused_output_matches_unfused[8] PASSED
+[ 37%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_fused_output_matches_unfused[16] 
+PASSED [ 37%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_fused_output_matches_unfused[32] 
+PASSED [ 37%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_fusion_saves_a_forward_pass_per_mixed_
+step PASSED [ 38%]
+  [PASS] tests/python/test_fused_prefill.py::test_fusion_is_off_by_default 
+PASSED [ 38%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_fusion_needs_both_kinds_of_work PASSED
+[ 38%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_fused_tokens_counts_every_packed_token
+PASSED [ 38%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_every_layer_takes_the_varlen_path 
+PASSED [ 39%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_fusion_rejects_the_decode_mirror 
+PASSED [ 39%]
+  [PASS] tests/python/test_fused_prefill.py::test_fusion_still_shares_prefixes 
+PASSED [ 39%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_blocks_are_reclaimed_after_fused_steps
+PASSED [ 39%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_fused_pass_restores_the_models_attenti
+on_implementation PASSED [ 40%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_an_unfused_engine_on_the_same_model_is
+_unaffected PASSED [ 40%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_fused_step_advances_the_prefill_cursor
+_to_the_chunk_end PASSED [ 40%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_fused_step_advances_the_decode_cursor_
+by_exactly_one PASSED [ 40%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_fused_logits_match_the_unfused_logits 
+PASSED [ 41%]
+  [PASS] 
+tests/python/test_fused_prefill.py::test_a_fused_final_chunk_registers_its_pref
+ix PASSED [ 41%]
+  [PASS] 
+tests/python/test_kernels.py::test_flat_slot_index_matches_manual_arithmetic 
+PASSED [ 41%]
+  [PASS] 
+tests/python/test_kernels.py::test_flat_indices_agrees_with_slot_indices PASSED
+[ 41%]
+  [PASS] 
+tests/python/test_kernels.py::test_gather_flat_is_bit_identical_to_gather[token
+_range0] PASSED [ 42%]
+  [PASS] 
+tests/python/test_kernels.py::test_gather_flat_is_bit_identical_to_gather[token
+_range1] PASSED [ 42%]
+  [PASS] 
+tests/python/test_kernels.py::test_gather_flat_is_bit_identical_to_gather[token
+_range2] PASSED [ 42%]
+  [PASS] 
+tests/python/test_kernels.py::test_gather_flat_is_bit_identical_to_gather[token
+_range3] PASSED [ 42%]
+  [PASS] 
+tests/python/test_kernels.py::test_gather_flat_is_bit_identical_to_gather[token
+_range4] PASSED [ 43%]
+  [PASS] 
+tests/python/test_kernels.py::test_gather_handles_a_scattered_block_table 
+PASSED [ 43%]
+  [PASS] 
+tests/python/test_kernels.py::test_gather_kv_rejects_a_block_size_mismatch 
+PASSED [ 43%]
+  [PASS] 
+tests/python/test_kernels.py::test_write_flat_round_trips_through_gather PASSED
+[ 43%]
+  [PASS] tests/python/test_kernels.py::test_write_flat_matches_write PASSED    
+[ 44%]
+  [PASS] 
+tests/python/test_kernels.py::test_write_flat_touches_only_the_addressed_slots 
+PASSED [ 44%]
+  [PASS] tests/python/test_kernels.py::test_buffers_round_up_and_reuse_shapes 
+PASSED [ 44%]
+  [PASS] tests/python/test_kernels.py::test_buffers_are_zeroed_on_reuse PASSED 
+[ 44%]
+  [PASS] 
+tests/python/test_kernels.py::test_assemble_batch_matches_the_pad_and_cat_refer
+ence PASSED [ 45%]
+  [PASS] tests/python/test_kernels.py::test_assemble_batch_pads_region_is_zero 
+PASSED [ 45%]
+  [PASS] 
+tests/python/test_kernels.py::test_assemble_batch_rejects_mismatched_inputs 
+PASSED [ 45%]
+  [PASS] 
+tests/python/test_kernels.py::test_scatter_kv_is_the_exact_inverse_of_gather_kv
+PASSED [ 45%]
+  [PASS] 
+tests/python/test_kv_pool.py::test_slot_indices_translate_logical_positions_to_
+physical_blocks PASSED [ 46%]
+  [PASS] 
+tests/python/test_kv_pool.py::test_slot_indices_handles_mid_sequence_range 
+PASSED [ 46%]
+  [PASS] 
+tests/python/test_kv_pool.py::test_slot_indices_rejects_positions_past_the_bloc
+k_table PASSED [ 46%]
+  [PASS] 
+tests/python/test_kv_pool.py::test_write_then_gather_round_trips_through_scatte
+red_blocks PASSED [ 46%]
+  [PASS] tests/python/test_kv_pool.py::test_layers_are_isolated_from_each_other
+PASSED [ 47%]
+  [PASS] 
+tests/python/test_kv_pool.py::test_sequences_sharing_a_pool_do_not_corrupt_each
+_other PASSED [ 47%]
+  [PASS] 
+tests/python/test_kv_pool.py::test_bytes_per_token_accounts_for_every_layer_and
+_both_tensors PASSED [ 47%]
+  [PASS] 
+tests/python/test_kv_pool.py::test_blocks_for_budget_stays_within_the_memory_bu
+dget PASSED [ 47%]
+  [PASS] tests/python/test_kv_pool.py::test_pool_reports_its_capacity_in_tokens
+PASSED [ 48%]
+  [PASS] 
+tests/python/test_logging_config.py::test_json_format_emits_one_object_per_line
+_with_extras PASSED [ 48%]
+  [PASS] 
+tests/python/test_logging_config.py::test_json_format_includes_exceptions 
+PASSED [ 48%]
+  [PASS] 
+tests/python/test_logging_config.py::test_json_format_survives_an_unserialisabl
+e_value PASSED [ 48%]
+  [PASS] 
+tests/python/test_logging_config.py::test_text_format_shows_extras_rather_than_
+dropping_them PASSED [ 49%]
+  [PASS] 
+tests/python/test_logging_config.py::test_text_format_without_extras_has_no_emp
+ty_brackets PASSED [ 49%]
+  [PASS] tests/python/test_logging_config.py::test_configure_is_idempotent 
+PASSED [ 49%]
+  [PASS] tests/python/test_logging_config.py::test_level_is_honoured PASSED    
+[ 50%]
+  [PASS] 
+tests/python/test_logging_config.py::test_level_comes_from_the_environment 
+PASSED [ 50%]
+  [PASS] 
+tests/python/test_logging_config.py::test_an_unknown_level_falls_back_to_info 
+PASSED [ 50%]
+  [PASS] 
+tests/python/test_logging_config.py::test_records_do_not_propagate_to_the_root_
+logger PASSED [ 50%]
+  [PASS] 
+tests/python/test_logging_config.py::test_engine_logs_reach_the_configured_hand
+ler PASSED [ 51%]
+  [PASS] 
+tests/python/test_logging_config.py::test_library_package_installs_only_a_null_
+handler PASSED [ 51%]
+  [PASS] 
+tests/python/test_logging_config.py::test_formatters_are_usable_directly PASSED
+[ 51%]
+  [PASS] tests/python/test_paged_attention.py::test_paged_kv_write_and_read 
+PASSED [ 51%]
+  [PASS] tests/python/test_paged_attention.py::test_paged_attention_forward 
+PASSED [ 52%]
+  [PASS] 
+tests/python/test_paged_cache.py::test_paged_cache_matches_dynamic_cache_exactl
+y PASSED [ 52%]
+  [PASS] tests/python/test_paged_cache.py::test_position_tracks_tokens_written 
+PASSED [ 52%]
+  [PASS] tests/python/test_paged_cache.py::test_all_layers_stay_in_lockstep 
+PASSED [ 52%]
+  [PASS] 
+tests/python/test_paged_cache.py::test_rollback_rewinds_without_touching_the_bl
+ock_table PASSED [ 53%]
+  [PASS] 
+tests/python/test_paged_cache.py::test_rollback_then_replay_matches_a_clean_run
+PASSED [ 53%]
+  [PASS] 
+tests/python/test_paged_cache.py::test_reset_returns_the_cache_to_empty PASSED 
+[ 53%]
+  [PASS] 
+tests/python/test_paged_cache.py::test_growing_the_block_table_is_picked_up 
+PASSED [ 53%]
+  [PASS] tests/python/test_paged_cache.py::test_rejects_batched_input PASSED   
+[ 54%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_shared_prefix_output_is_byte_identica
+l PASSED [ 54%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_partial_prefill_logits_match_full_pre
+fill PASSED [ 54%]
+  [PASS] tests/python/test_prefix_sharing.py::test_single_request_is_unaffected
+PASSED [ 54%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_divergent_suffix_outputs_match_solo_r
+uns PASSED [ 55%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_concurrent_identical_prompts_save_blo
+cks PASSED [ 55%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_sharing_telemetry_is_reported PASSED 
+[ 55%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_disabled_sharing_reports_zeroed_keys 
+PASSED [ 55%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_all_blocks_reclaimed_and_registry_emp
+tied PASSED [ 56%]
+  [PASS] tests/python/test_prefix_sharing.py::test_abort_releases_shared_blocks
+PASSED [ 56%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_preemption_with_sharing_matches_unpre
+ssured_run PASSED [ 56%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_prepare_write_is_noop_for_private_blo
+cks PASSED [ 56%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_copy_on_write_copies_then_privatises 
+PASSED [ 57%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_copy_block_is_a_noop_on_itself PASSED
+[ 57%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_hash_is_chained_over_the_whole_prefix
+PASSED [ 57%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_stale_registry_entry_is_never_served 
+PASSED [ 57%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_partial_blocks_are_never_shared 
+PASSED [ 58%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_final_block_withheld_on_exact_boundar
+y PASSED [ 58%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_release_acquired_strands_no_reference
+s PASSED [ 58%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_block_owners_exposes_multiple_owners 
+PASSED [ 58%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_block_owners_ignores_out_of_range 
+PASSED [ 59%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_engine_block_owners_matches_occupancy
+PASSED [ 59%]
+  [PASS] 
+tests/python/test_prefix_sharing.py::test_seed_position_moves_every_layer 
+PASSED [ 59%]
+  [PASS] 
+tests/python/test_rejection_sampler.py::test_rejection_sampler_perfect_match 
+PASSED [ 59%]
+  [PASS] 
+tests/python/test_rejection_sampler.py::test_rejection_sampler_rejection PASSED
+[ 60%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_allocator_starts_fully_free PASSED 
+[ 60%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_allocate_and_free_round_trip PASSED
+[ 60%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_allocator_refuses_to_oversubscribe 
+PASSED [ 60%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_blocks_are_never_handed_out_twice 
+PASSED [ 61%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_scheduler_admits_waiting_sequences_
+and_allocates_blocks PASSED [ 61%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_prefill_flag_is_only_set_on_the_fir
+st_step PASSED [ 61%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_block_table_grows_one_block_at_a_ti
+me PASSED [ 61%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_finished_sequences_are_reported_and
+_their_blocks_returned PASSED [ 62%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_memory_pressure_preempts_instead_of
+_stranding_a_sequence PASSED [ 62%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_preempted_sequence_is_rescheduled_f
+or_recomputation PASSED [ 62%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_request_larger_than_the_whole_pool_
+is_aborted_not_blocked PASSED [ 62%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_abort_releases_a_running_sequence 
+PASSED [ 63%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_max_num_seqs_caps_the_running_set 
+PASSED [ 63%]
+  [PASS] 
+tests/python/test_scheduler_bridge.py::test_step_result_reports_pool_utilizatio
+n PASSED [ 63%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_metrics_endpoint_is_prometheus_text
+PASSED [ 63%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_metrics_reports_engine_and_sharing_
+state PASSED [ 64%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_metrics_is_parseable_as_key_value_p
+airs PASSED [ 64%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_engine_saturated_is_raised_at_the_l
+imit PASSED [ 64%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_saturation_returns_429_with_retry_a
+fter PASSED [ 64%]
+  [PASS] tests/python/test_server_hardening.py::test_saturation_is_429_not_503 
+PASSED [ 65%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_in_flight_returns_to_zero_after_req
+uests PASSED [ 65%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_status_reports_admission_state 
+PASSED [ 65%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_run_cancellable_returns_the_result_
+when_connected PASSED [ 65%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_run_cancellable_propagates_work_err
+ors PASSED [ 66%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_run_cancellable_aborts_on_disconnec
+t PASSED [ 66%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_run_cancellable_cancels_the_work_on
+_disconnect PASSED [ 66%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_on_cancel_failure_does_not_mask_the
+_disconnect PASSED [ 66%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_unreadable_transport_is_treated_as_
+connected PASSED [ 67%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_blocks_endpoint_exposes_block_owner
+s PASSED [ 67%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_abort_is_deferred_to_the_stepping_t
+hread PASSED [ 67%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_concurrent_aborts_do_not_corrupt_a_
+running_step PASSED [ 67%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_aborting_an_unknown_or_finished_seq
+uence_is_false PASSED [ 68%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_ws_stream_applies_the_chat_template
+PASSED [ 68%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_ws_stream_raw_flag_bypasses_the_tem
+plate PASSED [ 68%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_empty_prompts_are_rejected[/v1/comp
+letions-body0] PASSED [ 68%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_empty_prompts_are_rejected[/v1/comp
+letions-body1] PASSED [ 69%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_empty_prompts_are_rejected[/v1/chat
+/completions-body2] PASSED [ 69%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_empty_prompts_are_rejected[/v1/chat
+/completions-body3] PASSED [ 69%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_empty_prompts_are_rejected[/v1/chat
+/completions-body4] PASSED [ 69%]
+  [PASS] tests/python/test_server_hardening.py::test_valid_prompts_still_pass 
+PASSED [ 70%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_live_metrics_includes_sharing_keys 
+PASSED [ 70%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_speculative_worker_holds_a_thread_l
+ock_for_its_whole_run PASSED [ 70%]
+  [PASS] 
+tests/python/test_server_hardening.py::test_abandoned_speculative_stream_is_can
+celled_early PASSED [ 70%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_speculative_batch_output_is_ide
+ntical_to_plain_batch PASSED [ 71%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_output_is_independent_of_lookah
+ead[1] PASSED [ 71%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_output_is_independent_of_lookah
+ead[2] PASSED [ 71%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_output_is_independent_of_lookah
+ead[3] PASSED [ 71%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_output_is_independent_of_lookah
+ead[5] PASSED [ 72%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_output_is_independent_of_lookah
+ead[8] PASSED [ 72%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_single_sequence_speculation_is_
+also_lossless PASSED [ 72%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_speculation_survives_staggered_
+arrivals PASSED [ 72%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_self_draft_accepts_every_candid
+ate PASSED [ 73%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_self_draft_output_is_still_exac
+tly_greedy[1] PASSED [ 73%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_self_draft_output_is_still_exac
+tly_greedy[2] PASSED [ 73%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_self_draft_output_is_still_exac
+tly_greedy[3] PASSED [ 73%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_self_draft_output_is_still_exac
+tly_greedy[4] PASSED [ 74%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_self_draft_output_is_still_exac
+tly_greedy[7] PASSED [ 74%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_self_draft_confirms_many_tokens
+_per_round PASSED [ 74%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_self_draft_handles_a_limit_that
+_is_not_a_multiple_of_the_run PASSED [ 74%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_self_draft_respects_the_context
+_limit PASSED [ 75%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_self_draft_reclaims_every_block
+PASSED [ 75%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_one_target_pass_per_round_not_o
+ne_per_sequence PASSED [ 75%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_speculation_confirms_more_than_
+one_token_per_round PASSED [ 75%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_acceptance_telemetry_is_reporte
+d PASSED [ 76%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_telemetry_reports_speculation_o
+ff_by_default PASSED [ 76%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_eos_part_way_through_an_accepte
+d_run PASSED [ 76%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_headroom_check_avoids_drafting_
+that_cannot_be_used PASSED [ 76%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_speculative_generation_terminat
+es_in_bounded_steps PASSED [ 77%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_draft_model_without_lookahead_s
+tays_disabled PASSED [ 77%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_lookahead_without_draft_model_s
+tays_disabled PASSED [ 77%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_sequence_near_its_token_limit_f
+alls_back_cleanly PASSED [ 77%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_scheduler_reserves_the_candidat
+e_slots PASSED [ 78%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_blocks_are_fully_reclaimed_afte
+r_speculative_generation PASSED [ 78%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_server_config_exposes_batched_s
+peculation_off_by_default PASSED [ 78%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_server_config_reads_the_env_var
+PASSED [ 78%]
+  [PASS] 
+tests/python/test_speculative_batching.py::test_engine_reaches_the_scheduler_wi
+th_the_configured_lookahead PASSED [ 79%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_greedy_speculative_equals_greedy
+_target PASSED [ 79%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_a_perfect_draft_accepts_every_pr
+oposal PASSED [ 79%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_an_uncorrelated_draft_is_still_l
+ossless PASSED [ 79%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_generates_exactly_the_requested_
+token_count PASSED [ 80%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_every_token_is_attributed_to_a_k
+nown_source PASSED [ 80%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_acceptance_accounting_is_self_co
+nsistent PASSED [ 80%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_blocks_are_released_when_generat
+ion_ends PASSED [ 80%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_blocks_are_released_even_if_the_
+stream_is_abandoned PASSED [ 81%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_stream_yields_one_event_per_toke
+n PASSED [ 81%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_rollback_is_recorded_when_propos
+als_are_rejected PASSED [ 81%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_mismatched_vocabularies_are_reje
+cted PASSED [ 81%]
+  [PASS] 
+tests/python/test_speculative_runtime.py::test_pool_exhaustion_raises_rather_th
+an_corrupting PASSED [ 82%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_group_by_sequence_preserves_first_s
+een_order PASSED [ 82%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_group_by_sequence_handles_a_single_
+row PASSED [ 82%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_decode_only_matches_reference[lengt
+hs0] PASSED [ 82%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_decode_only_matches_reference[lengt
+hs1] PASSED [ 83%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_decode_only_matches_reference[lengt
+hs2] PASSED [ 83%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_decode_only_matches_reference[lengt
+hs3] PASSED [ 83%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_decode_only_matches_reference[lengt
+hs4] PASSED [ 83%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_decode_only_matches_reference[lengt
+hs5] PASSED [ 84%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_decode_agrees_with_the_single_query
+_kernel PASSED [ 84%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_full_prefill_matches_reference[1] 
+PASSED [ 84%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_full_prefill_matches_reference[2] 
+PASSED [ 84%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_full_prefill_matches_reference[4] 
+PASSED [ 85%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_full_prefill_matches_reference[5] 
+PASSED [ 85%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_full_prefill_matches_reference[8] 
+PASSED [ 85%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_full_prefill_matches_reference[13] 
+PASSED [ 85%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_full_prefill_matches_reference[16] 
+PASSED [ 86%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_full_prefill_matches_reference[17] 
+PASSED [ 86%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_prefill_chunk_matches_reference[0-4
+] PASSED [ 86%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_prefill_chunk_matches_reference[4-4
+] PASSED [ 86%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_prefill_chunk_matches_reference[2-3
+] PASSED [ 87%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_prefill_chunk_matches_reference[8-5
+] PASSED [ 87%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_prefill_chunk_matches_reference[5-7
+] PASSED [ 87%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_prefill_chunk_matches_reference[13-
+3] PASSED [ 87%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_prefill_chunk_fused_with_decodes_ma
+tches_reference[1] PASSED [ 88%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_prefill_chunk_fused_with_decodes_ma
+tches_reference[3] PASSED [ 88%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_prefill_chunk_fused_with_decodes_ma
+tches_reference[4] PASSED [ 88%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_prefill_chunk_fused_with_decodes_ma
+tches_reference[7] PASSED [ 88%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_prefill_chunk_fused_with_decodes_ma
+tches_reference[12] PASSED [ 89%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_interleaved_packing_order_does_not_
+matter PASSED [ 89%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_two_sequences_may_share_one_sequenc
+e_id_slot PASSED [ 89%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_a_token_cannot_see_later_positions 
+PASSED [ 89%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_one_sequence_cannot_see_another 
+PASSED [ 90%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_unwritten_slots_of_a_partial_block_
+are_not_read PASSED [ 90%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_grouped_query_attention_matches_ref
+erence[4-4] PASSED [ 90%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_grouped_query_attention_matches_ref
+erence[4-2] PASSED [ 90%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_grouped_query_attention_matches_ref
+erence[8-2] PASSED [ 91%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_grouped_query_attention_matches_ref
+erence[6-3] PASSED [ 91%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_each_layer_reads_its_own_slice_of_t
+he_pool PASSED [ 91%]
+  [PASS] tests/python/test_varlen_attention.py::test_custom_scale_is_applied 
+PASSED [ 91%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_rejects_a_mismatched_metadata_lengt
+h PASSED [ 92%]
+  [PASS] tests/python/test_varlen_attention.py::test_rejects_an_empty_pack 
+PASSED [ 92%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_rejects_a_negative_position PASSED 
+[ 92%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_rejects_a_seq_id_with_no_block_tabl
+e PASSED [ 92%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_rejects_a_position_past_the_block_t
+able PASSED [ 93%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_rejects_a_head_count_that_is_not_a_
+multiple_of_kv_heads PASSED [ 93%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_materialised_matches_block_wise[seq
+_ids0-positions0-lengths0] PASSED [ 93%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_materialised_matches_block_wise[seq
+_ids1-positions1-lengths1] PASSED [ 93%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_materialised_matches_block_wise[seq
+_ids2-positions2-lengths2] PASSED [ 94%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_materialised_matches_block_wise[seq
+_ids3-positions3-lengths3] PASSED [ 94%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_materialised_matches_block_wise[seq
+_ids4-positions4-lengths4] PASSED [ 94%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_materialised_matches_block_wise[seq
+_ids5-positions5-lengths5] PASSED [ 94%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_materialised_also_matches_the_plain
+_reference PASSED [ 95%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_materialised_grouped_query_attentio
+n[4-4] PASSED [ 95%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_materialised_grouped_query_attentio
+n[4-2] PASSED [ 95%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_materialised_grouped_query_attentio
+n[8-2] PASSED [ 95%]
+  [PASS] 
+tests/python/test_varlen_attention.py::test_materialised_rejects_a_position_pas
+t_the_block_table PASSED [ 96%]
+  [PASS] 
+tests/python/test_varlen_cache.py::test_write_index_addresses_each_token_throug
+h_its_own_table PASSED [ 96%]
+  [PASS] 
+tests/python/test_varlen_cache.py::test_write_index_is_independent_of_packing_o
+rder PASSED [ 96%]
+  [PASS] 
+tests/python/test_varlen_cache.py::test_update_scatters_into_the_addressed_slot
+s PASSED [ 96%]
+  [PASS] 
+tests/python/test_varlen_cache.py::test_each_layer_writes_its_own_slice PASSED 
+[ 97%]
+  [PASS] 
+tests/python/test_varlen_cache.py::test_two_tokens_cannot_claim_the_same_slot 
+PASSED [ 97%]
+  [PASS] 
+tests/python/test_varlen_cache.py::test_a_sequence_cannot_write_the_same_positi
+on_twice PASSED [ 97%]
+  [PASS] 
+tests/python/test_varlen_cache.py::test_rejects_a_position_past_the_block_table
+PASSED [ 97%]
+  [PASS] tests/python/test_varlen_cache.py::test_rejects_an_unknown_sequence_id
+PASSED [ 98%]
+  [PASS] tests/python/test_varlen_cache.py::test_rejects_a_negative_position 
+PASSED [ 98%]
+  [PASS] tests/python/test_varlen_cache.py::test_rejects_mismatched_metadata 
+PASSED [ 98%]
+  [PASS] tests/python/test_varlen_cache.py::test_rejects_an_empty_pass PASSED  
+[ 98%]
+  [PASS] 
+tests/python/test_varlen_cache.py::test_update_rejects_a_real_batch_dimension 
+PASSED [ 99%]
+  [PASS] 
+tests/python/test_varlen_cache.py::test_update_rejects_the_wrong_token_count 
+PASSED [ 99%]
+  [PASS] 
+tests/python/test_varlen_cache.py::test_crop_is_refused_rather_than_silently_ig
+nored PASSED [ 99%]
+  [PASS] tests/python/test_varlen_cache.py::test_reports_no_sequence_length 
+PASSED [100%]
+
+────────────── Stage 4: Paged KV-Cache & Fragmentation Benchmark ──────────────
+[EngineBridge] Initializing native C++ engine (memforge_c)...
+                Paged KV-Cache Benchmark Results                
+┌─────────────────────────┬────────────────────────────────────┐
+│ Metric                  │ Value                              │
+├─────────────────────────┼────────────────────────────────────┤
+│ Managed Physical Blocks │ 4,096                              │
+│ Block Size              │ 16 Tokens / Block                  │
+│ Total Capacity          │ 65,536 Tokens                      │
+│ Allocation Speed        │ 26,272,579 blocks/sec (0.12 ms)    │
+│ Deallocation Speed      │ 27,234,051 blocks/sec (0.12 ms)    │
+│ Memory Fragmentation    │ 0.0% (Zero External Fragmentation) │
+└─────────────────────────┴────────────────────────────────────┘
+
+────────────── Stage 5: Continuous Batching Simulation Benchmark ──────────────
+                   Continuous vs Static Batching Comparison                    
+┌────────────────────────────┬─────────────┬───────────────┬──────────────────┐
+│ Scheduling Policy          │ Total Steps │ Tokens / Step │ GPU Idle Bubbles │
+├────────────────────────────┼─────────────┼───────────────┼──────────────────┤
+│ Static Batching (Size 8)   │       1,475 │          2.88 │       62.5% idle │
+│ Continuous Batching        │         553 │          7.69 │ 0.0% (Saturated) │
+│ (MemForge)                 │             │               │                  │
+└────────────────────────────┴─────────────┴───────────────┴──────────────────┘
+  [PASS] Iteration-level scheduling eliminates batch bubbles (2.67x speedup).
+
+───────────── Stage 6: Speculative Rejection Sampling Simulation ──────────────
+   Speculative Decoding Acceptance Stats    
+┌───────────────────────────────┬──────────┐
+│ Metric                        │ Value    │
+├───────────────────────────────┼──────────┤
+│ Simulated Verification Cycles │ 1,000    │
+│ Candidate Lookahead (K)       │ 4 Tokens │
+│ Draft Tokens Proposed         │ 4,000    │
+│ Draft Tokens Accepted         │ 1,229    │
+│ Statistical Acceptance Rate   │ 30.7%    │
+│ Effective Speedup Multiplier  │ 1.33x    │
+└───────────────────────────────┴──────────┘
+  [PASS] Lossless rejection sampling preserves exact target probability 
+distribution.
+
+─────────────── Stage 7: Live Engine End-to-End (real weights) ────────────────
+Loading HuggingFaceTB/SmolLM2-360M-Instruct from the local cache...
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  89%|████████▊ | 257/290 [00:00<00:00, 2544.61it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 2247.30it/s]
+  [PASS] Paged KV pool: 191.25 MB, 153 blocks x 16 tokens (2,448 token 
+capacity).
+                  Live Engine: 3 Concurrent Requests                  
+┌──────────────────────────────┬─────────────────────────────────────┐
+│ Metric                       │ Value                               │
+├──────────────────────────────┼─────────────────────────────────────┤
+│ Model                        │ HuggingFaceTB/SmolLM2-360M-Instruct │
+│ Requests served concurrently │ 3                                   │
+│ Tokens generated             │ 72                                  │
+│ Wall clock                   │ 1.70s                               │
+│ Aggregate throughput         │ 42.47 tok/s                         │
+│ Engine steps                 │ 26                                  │
+│ Model forward passes         │ 26                                  │
+│ Tokens per forward pass      │ 2.769                               │
+│ Preemptions                  │ 0                                   │
+│ Blocks reclaimed after drain │ 153/153                             │
+└──────────────────────────────┴─────────────────────────────────────┘
+  [PASS] Continuous batching confirmed 2.769 tokens per forward pass; all 
+physical blocks reclaimed.
+
+───────────────────── MemForge Pipeline Execution Summary ─────────────────────
+┌────────────────────────────┬────────┬──────────┬────────────────────────────┐
+│ Pipeline Stage             │ Status │ Time (s) │ Highlights / Metrics       │
+├────────────────────────────┼────────┼──────────┼────────────────────────────┤
+│ Stage 1: C++ Core Unit     │ PASSED │   22.65s │ 3 C++ Test Suites Passed   │
+│ Tests                      │        │          │ (MSVC)                     │
+│ Stage 2: Native pybind11   │ PASSED │    0.00s │ Native pybind11 C++ bridge │
+│ Bridge                     │        │          │ active                     │
+│ Stage 3: Python ML & API   │ PASSED │   16.98s │ 398 Python Tests Passed    │
+│ Tests                      │        │          │                            │
+│ Stage 4: Paged KV-Cache    │ PASSED │    0.00s │ {'alloc_rate':             │
+│ Benchmark                  │        │          │ 26272578.833055835,        │
+│                            │        │          │ 'fragmentation': '0.0%'}   │
+│ Stage 5: Continuous        │ PASSED │    0.00s │ {'speedup':                │
+│ Batching Benchmark         │        │          │ 2.667269439421338,         │
+│                            │        │          │ 'reduction':               │
+│                            │        │          │ 62.50847457627119}         │
+│ Stage 6: Speculative       │ PASSED │    0.82s │ {'acceptance_rate':        │
+│ Decoding Benchmark         │        │          │ 0.30725, 'speedup':        │
+│                            │        │          │ 1.3259082471492973}        │
+│ Stage 7: Live Engine       │ PASSED │    5.30s │ 2.769 tok/forward, 0       │
+│ End-to-End                 │        │          │ leaked blocks              │
+└────────────────────────────┴────────┴──────────┴────────────────────────────┘
+┌────────────────────────── Pipeline Status: READY ───────────────────────────┐
+│ ALL PIPELINE STAGES PASSED SUCCESSFULLY!                                    │
+│ Total Execution Time: 46.28 seconds                                         │
+│                                                                             │
+│ To start the interactive server: uvicorn server.app:app --reload            │
+│ To start the UI dashboard: cd frontend && npm run dev                       │
+└─────────────────────────────────────────────────────────────────────────────┘

@@ -1,0 +1,154 @@
+{
+  "benchmark": "context_sweep",
+  "phase": "A",
+  "generated_at": "2026-11-01T21:35:49",
+  "platform": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "system": "Windows",
+    "python": "3.12.7",
+    "torch": "2.11.0+cu128",
+    "torch_cuda": "12.8",
+    "cuda_available": true,
+    "device": "cuda:0",
+    "dtype": "torch.float16",
+    "device_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "compute_capability": "8.9",
+    "vram_total_mb": 6140.5,
+    "vram_free_mb": 0.0
+  },
+  "peak_memory_mb": 4599.2,
+  "config": {
+    "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+    "contexts": [
+      128,
+      512,
+      1024,
+      2048
+    ],
+    "steps": 8,
+    "repeats": 3,
+    "block_size": 16,
+    "concurrency": 4
+  },
+  "model_geometry": {
+    "num_layers": 32,
+    "num_kv_heads": 5,
+    "head_dim": 64,
+    "bytes_per_token": 40960
+  },
+  "all_outputs_identical": true,
+  "rows": [
+    {
+      "context_tokens": 128,
+      "contiguous_tok_per_s": 29.372,
+      "paged_tok_per_s": 26.225,
+      "relative_throughput": 0.8929,
+      "within_5_percent": false,
+      "contiguous_prefill_s": 0.044,
+      "paged_prefill_s": 0.0395,
+      "output_identical": true,
+      "contiguous_samples": [
+        23.804,
+        29.372,
+        31.348
+      ],
+      "paged_samples": [
+        25.006,
+        27.124,
+        26.225
+      ],
+      "batched": {
+        "concurrency": 4,
+        "wall_s": 0.671,
+        "tokens": 32,
+        "tok_per_s": 47.71,
+        "tokens_per_forward_pass": 2.909,
+        "forward_passes": 11
+      }
+    },
+    {
+      "context_tokens": 512,
+      "contiguous_tok_per_s": 26.825,
+      "paged_tok_per_s": 23.295,
+      "relative_throughput": 0.8684,
+      "within_5_percent": false,
+      "contiguous_prefill_s": 0.0361,
+      "paged_prefill_s": 0.0463,
+      "output_identical": true,
+      "contiguous_samples": [
+        26.825,
+        28.869,
+        24.776
+      ],
+      "paged_samples": [
+        23.295,
+        25.276,
+        21.702
+      ],
+      "batched": {
+        "concurrency": 4,
+        "wall_s": 0.685,
+        "tokens": 32,
+        "tok_per_s": 46.68,
+        "tokens_per_forward_pass": 2.909,
+        "forward_passes": 11
+      }
+    },
+    {
+      "context_tokens": 1024,
+      "contiguous_tok_per_s": 21.692,
+      "paged_tok_per_s": 21.283,
+      "relative_throughput": 0.9811,
+      "within_5_percent": true,
+      "contiguous_prefill_s": 0.0966,
+      "paged_prefill_s": 0.1048,
+      "output_identical": true,
+      "contiguous_samples": [
+        20.106,
+        22.99,
+        21.692
+      ],
+      "paged_samples": [
+        18.266,
+        21.378,
+        21.283
+      ],
+      "batched": {
+        "concurrency": 4,
+        "wall_s": 1.118,
+        "tokens": 32,
+        "tok_per_s": 28.63,
+        "tokens_per_forward_pass": 2.909,
+        "forward_passes": 11
+      }
+    },
+    {
+      "context_tokens": 2048,
+      "contiguous_tok_per_s": 13.379,
+      "paged_tok_per_s": 12.974,
+      "relative_throughput": 0.9697,
+      "within_5_percent": true,
+      "contiguous_prefill_s": 0.3405,
+      "paged_prefill_s": 0.3487,
+      "output_identical": true,
+      "contiguous_samples": [
+        13.398,
+        13.379,
+        13.025
+      ],
+      "paged_samples": [
+        12.974,
+        13.109,
+        11.911
+      ],
+      "batched": {
+        "concurrency": 4,
+        "wall_s": 3.104,
+        "tokens": 32,
+        "tok_per_s": 10.31,
+        "tokens_per_forward_pass": 2.909,
+        "forward_passes": 11
+      }
+    }
+  ]
+}

@@ -1,0 +1,126 @@
+
+==========================================================================
+MemForge Phase B -- Prefix Sharing (Copy-on-Write)
+==========================================================================
+model            : HuggingFaceTB/SmolLM2-360M-Instruct
+shared prefix    : 256 tokens
+generated tokens : 12 per request
+pool             : 1200 blocks x 16 tokens
+device           : cuda:0 torch.float16 (torch 2.11.0+cu128)
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  30%|##9       | 86/290 [00:00<00:00, 788.99it/s]Loading weights:  57%|#####6    | 165/290 [00:00<00:00, 734.00it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 940.51it/s]
+
+==========================================================================
+1 concurrent request(s), 263-token prompts
+==========================================================================
+                                   OFF          ON
+  peak blocks                       18          18
+  peak KV MB                     11.25       11.25
+  prefill tokens                   263         263
+  forward passes                    12          12
+  median TTFT ms                515.26        57.3
+  wall seconds                   1.003         0.5
+  shared blocks                      0           0
+  prefix hit rate                  0.0         0.0
+
+  block ratio ON/OFF   : 1.000
+  prefill ratio ON/OFF : 1.000
+  output byte-identical: YES
+  cow copies           : 0
+  blocks leaked        : OFF 0, ON 0
+
+==========================================================================
+2 concurrent request(s), 263-token prompts
+==========================================================================
+                                   OFF          ON
+  peak blocks                       36          20
+  peak KV MB                      22.5        12.5
+  prefill tokens                   526         270
+  forward passes                    13          14
+  median TTFT ms                 77.33       77.84
+  wall seconds                   0.621        0.59
+  shared blocks                      0          16
+  prefix hit rate                  0.0      0.8889
+
+  block ratio ON/OFF   : 0.556
+  prefill ratio ON/OFF : 0.513
+  output byte-identical: YES
+  cow copies           : 0
+  blocks leaked        : OFF 0, ON 0
+
+==========================================================================
+4 concurrent request(s), 263-token prompts
+==========================================================================
+                                   OFF          ON
+  peak blocks                       72          24
+  peak KV MB                      45.0        15.0
+  prefill tokens                  1052         284
+  forward passes                    15          16
+  median TTFT ms                106.16       93.81
+  wall seconds                   0.748         0.8
+  shared blocks                      0          16
+  prefix hit rate                  0.0        0.96
+
+  block ratio ON/OFF   : 0.333
+  prefill ratio ON/OFF : 0.270
+  output byte-identical: YES
+  cow copies           : 0
+  blocks leaked        : OFF 0, ON 0
+
+==========================================================================
+8 concurrent request(s), 263-token prompts
+==========================================================================
+                                   OFF          ON
+  peak blocks                      144          32
+  peak KV MB                      90.0        20.0
+  prefill tokens                  2104         312
+  forward passes                    19          20
+  median TTFT ms                189.84      179.25
+  wall seconds                   1.126       1.124
+  shared blocks                      0          16
+  prefix hit rate                  0.0      0.9825
+
+  block ratio ON/OFF   : 0.222
+  prefill ratio ON/OFF : 0.148
+  output byte-identical: YES
+  cow copies           : 0
+  blocks leaked        : OFF 0, ON 0
+
+==========================================================================
+16 concurrent request(s), 263-token prompts
+==========================================================================
+                                   OFF          ON
+  peak blocks                      288          48
+  peak KV MB                     180.0        30.0
+  prefill tokens                  4214         374
+  forward passes                    27          28
+  median TTFT ms                 366.9       456.3
+  wall seconds                   1.922       1.947
+  shared blocks                      0          16
+  prefix hit rate                  0.0      0.9917
+
+  block ratio ON/OFF   : 0.167
+  prefill ratio ON/OFF : 0.089
+  output byte-identical: YES
+  cow copies           : 0
+  blocks leaked        : OFF 0, ON 0
+
+==========================================================================
+Summary
+==========================================================================
+   N   blocks OFF   blocks ON    ratio  prefill ratio   identical
+   1           18          18    1.000          1.000        True
+   2           36          20    0.556          0.513        True
+   4           72          24    0.333          0.270        True
+   8          144          32    0.222          0.148        True
+  16          288          48    0.167          0.089        True
+
+Best memory reduction: 6.0x at N=16 (288 -> 48 blocks)
+
+Output byte-identical to the non-sharing engine at every concurrency level.
+
+  !! VRAM SPILL: peak allocation 6570 MB against a 6140 MB card.
+     CUDA on Windows pages to host RAM instead of failing, so the timings above are
+     contaminated by PCIe traffic and are NOT valid GPU numbers. Re-run with a smaller
+     --kv-budget-mb, fewer --contexts, or --skip-batched.
+
+Wrote benchmarks\results\prefix_sharing.json

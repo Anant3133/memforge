@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import statistics
 import sys
 import time
@@ -51,9 +52,11 @@ from transformers.cache_utils import DynamicCache  # noqa: E402
 from memforge_ml.model_defaults import DEFAULT_TARGET_MODEL  # noqa: E402
 from _device import (  # noqa: E402
     add_device_args,
+    add_output_arg,
     describe_device,
     peak_memory_mb,
     resolve_device,
+    vram_spill_check,
 )
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine  # noqa: E402
 from memforge_ml.runtime.kv_pool import ModelKVSpec, PagedKVPool  # noqa: E402
@@ -62,6 +65,37 @@ from memforge_ml.runtime.paged_cache import PagedCache  # noqa: E402
 from memforge_ml.runtime.sampling import SamplingParams  # noqa: E402
 
 RESULTS_PATH = PROJECT_ROOT / "benchmarks" / "results" / "context_sweep.json"
+
+#: Bootstrap resamples for the ratio confidence interval. 2000 is plenty for a
+#: 95% interval and costs microseconds against a benchmark that takes minutes.
+BOOTSTRAP_RESAMPLES = 2000
+
+
+def _bootstrap_median_ci(samples: List[float], conf: float = 0.95,
+                         resamples: int = BOOTSTRAP_RESAMPLES,
+                         seed: int = 0) -> tuple:
+    """
+    A `conf` confidence interval for the median of `samples`, by bootstrap.
+
+    Seeded, so re-running the same measurements gives the same interval and a
+    verdict never flips because of the statistics rather than the engine.
+
+    Returns `(lo, hi)`, or `(median, median)` for a single sample -- one repeat
+    carries no information about its own spread, and reporting a zero-width
+    interval around it is the honest answer rather than a fabricated band.
+    """
+    if not samples:
+        return (0.0, 0.0)
+    if len(samples) == 1:
+        return (samples[0], samples[0])
+    rng = random.Random(seed)
+    n = len(samples)
+    medians = sorted(
+        statistics.median(rng.choices(samples, k=n)) for _ in range(resamples)
+    )
+    lo_i = int((1.0 - conf) / 2.0 * resamples)
+    hi_i = min(resamples - 1, int((1.0 + conf) / 2.0 * resamples))
+    return (medians[lo_i], medians[hi_i])
 
 
 def banner(text: str) -> None:
@@ -224,9 +258,18 @@ def main() -> int:
     parser.add_argument("--model", default=DEFAULT_TARGET_MODEL)
     parser.add_argument("--contexts", type=int, nargs="+", default=[128, 512, 1024, 2048])
     parser.add_argument("--steps", type=int, default=8, help="decode steps per run")
-    parser.add_argument("--repeats", type=int, default=3,
-                        help="interleaved repeats; the median is reported")
+    parser.add_argument("--repeats", type=int, default=9,
+                        help="interleaved repeats; the median is reported. Was 3, "
+                             "which could not resolve the 5%% DoD: measured spread "
+                             "at short contexts is 12-26%%, several times the band "
+                             "being tested")
+    parser.add_argument("--warmup", type=int, default=2,
+                        help="unmeasured interleaved iterations before timing, "
+                             "discarded. GPU clocks ramp and the first sample is "
+                             "consistently the slowest, which biased whichever "
+                             "path ran first")
     add_device_args(parser)
+    add_output_arg(parser, "context_sweep")
     parser.add_argument("--block-size", type=int, default=16)
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--kv-budget-mb", type=float, default=1024.0)
@@ -272,6 +315,18 @@ def main() -> int:
         view_rates: List[float] = []
         view_tokens = None
         view_mb = 0.0
+        # Warmup is discarded, not averaged in. On GPU the first iteration pays
+        # clock ramp, kernel autotuning and allocator growth; with runs ordered
+        # contiguous-then-paged that cost lands entirely on contiguous and
+        # flatters paging by several percent -- inside the 5% band we are trying
+        # to measure.
+        for _ in range(max(0, args.warmup)):
+            decode_contiguous(model, prompt, args.steps)
+            decode_paged(model, spec, prompt, args.steps, args.block_size)
+            if args.view_cache:
+                decode_paged(model, spec, prompt, args.steps, args.block_size,
+                             view_cache=True)
+
         for r in range(args.repeats):
             c = decode_contiguous(model, prompt, args.steps)
             p = decode_paged(model, spec, prompt, args.steps, args.block_size)
@@ -292,7 +347,35 @@ def main() -> int:
 
         cont = statistics.median(cont_rates)
         paged = statistics.median(paged_rates)
-        ratio = paged / cont if cont else 0.0
+        # Paired, not ratio-of-medians. Each repeat times both paths back to
+        # back, so dividing within a repeat cancels whatever the machine was
+        # doing at that moment; dividing the medians does not. The spread of the
+        # paired ratios is also the honest error bar on the DoD.
+        paired = [p / c for c, p in zip(cont_rates, paged_rates) if c]
+        ratio = statistics.median(paired) if paired else 0.0
+        # A bootstrap CI on the median, not the sample min/max. The raw range
+        # *widens* with more repeats -- more draws find more extremes -- so
+        # using it as the error bar meant the verdict could never converge no
+        # matter how long the benchmark ran, which defeats the point of adding
+        # repeats. A bootstrap interval narrows as evidence accumulates.
+        ratio_lo, ratio_hi = _bootstrap_median_ci(paired)
+        # One-sided: the DoD is "paging must not cost throughput", so being
+        # faster than contiguous passes. A two-sided band marked a 7% speedup
+        # as a failure.
+        meets = ratio >= 0.95
+        # If the interval straddles the threshold, the run has not resolved the
+        # question and must not claim either answer.
+        #
+        # The sample-count floor is not decoration. A bootstrap on 3 points can
+        # only ever report medians drawn from those 3 values, so it produces a
+        # deceptively tight interval -- measured width 0.046 at n=3 against
+        # 0.081 at n=9 on the same distribution. Trusting it would reintroduce
+        # exactly the false confidence this check exists to remove.
+        MIN_REPEATS_TO_DECIDE = 5
+        decided = (
+            len(paired) >= MIN_REPEATS_TO_DECIDE
+            and (ratio_lo >= 0.95 or ratio_hi < 0.95)
+        )
         identical = cont_tokens == paged_tokens
         if not identical:
             mismatches.append(ctx)
@@ -317,7 +400,10 @@ def main() -> int:
             "contiguous_tok_per_s": round(cont, 3),
             "paged_tok_per_s": round(paged, 3),
             "relative_throughput": round(ratio, 4),
-            "within_5_percent": bool(abs(1 - ratio) <= 0.05),
+            "relative_throughput_min": round(ratio_lo, 4),
+            "relative_throughput_max": round(ratio_hi, 4),
+            "within_5_percent": bool(meets),
+            "verdict_decided": bool(decided),
             "contiguous_prefill_s": round(statistics.median(cont_prefill), 4),
             "paged_prefill_s": round(statistics.median(paged_prefill), 4),
             "output_identical": identical,
@@ -347,11 +433,16 @@ def main() -> int:
     # ------------------------------------------------------------- summary
     banner("Summary")
     print(f"{'context':>9}{'contiguous':>13}{'paged':>11}{'relative':>11}"
-          f"{'within 5%':>11}{'identical':>11}")
+          f"{'spread':>17}{'within 5%':>11}{'identical':>11}")
     for row in rows:
+        spread = (f"{row['relative_throughput_min']:.3f}-"
+                  f"{row['relative_throughput_max']:.3f}")
+        verdict = str(row["within_5_percent"])
+        if not row["verdict_decided"]:
+            verdict = "UNDECIDED"
         print(f"{row['context_tokens']:>9}{row['contiguous_tok_per_s']:>13.2f}"
               f"{row['paged_tok_per_s']:>11.2f}{row['relative_throughput']:>11.3f}"
-              f"{str(row['within_5_percent']):>11}{str(row['output_identical']):>11}")
+              f"{spread:>17}{verdict:>11}{str(row['output_identical']):>11}")
 
     worst = min(rows, key=lambda r: r["relative_throughput"])
     print(f"\nWorst case: {worst['relative_throughput']:.3f}x at "
@@ -360,9 +451,17 @@ def main() -> int:
     target = next((r for r in rows if r["context_tokens"] == 2048), None)
     if target:
         gap = (1 - target["relative_throughput"]) * 100
-        met = target["within_5_percent"]
-        print(f"Phase A target (within 5% at 2048): "
-              f"{'MET' if met else f'NOT MET -- {gap:.1f}% slower than contiguous'}")
+        if not target["verdict_decided"]:
+            # Saying MET or NOT MET from a spread that straddles the threshold
+            # is not a measurement, it is a coin toss with a decimal point on
+            # it. Report the range and ask for more repeats instead.
+            print(f"Phase A target (within 5% at 2048): UNDECIDED -- the paired "
+                  f"ratios span {target['relative_throughput_min']:.3f}x to "
+                  f"{target['relative_throughput_max']:.3f}x, which straddles "
+                  f"0.95x. Re-run with more --repeats.")
+        else:
+            print(f"Phase A target (within 5% at 2048): "
+                  f"{'MET' if target['within_5_percent'] else f'NOT MET -- {gap:.1f}% slower than contiguous'}")
 
     if mismatches:
         print(f"\nFAILED: paged output differed from contiguous at {mismatches}. "
@@ -378,11 +477,13 @@ def main() -> int:
         # None on CPU, not 0.0: torch has no CPU allocator to query, and a zero
         # would read as "measured, and it was nothing".
         "peak_memory_mb": peak_memory_mb(device),
+        "vram_spill": vram_spill_check(device, peak_memory_mb(device)),
         "config": {
             "model": args.model,
             "contexts": args.contexts,
             "steps": args.steps,
             "repeats": args.repeats,
+            "warmup": args.warmup,
             "block_size": args.block_size,
             "concurrency": None if args.skip_batched else args.concurrency,
         },
@@ -395,8 +496,9 @@ def main() -> int:
         "all_outputs_identical": not mismatches,
         "rows": rows,
     }
-    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    RESULTS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    out_path = Path(args.out) if getattr(args, "out", None) else RESULTS_PATH
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(f"\nWrote {RESULTS_PATH.relative_to(PROJECT_ROOT)}")
 
     return 1 if mismatches else 0

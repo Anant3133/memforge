@@ -1,0 +1,123 @@
+
+==============================================================================
+MemForge Phase C — does a long prompt stall in-flight decoding?
+==============================================================================
+model            : HuggingFaceTB/SmolLM2-360M-Instruct
+intruding prompt : 512 tokens
+victim           : 32-token prompt, 16 tokens generated
+budgets          : [0, 64, 16, 4]  (0 = unlimited, the old behaviour)
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  88%|########8 | 256/290 [00:00<00:00, 2546.83it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 2577.41it/s]
+
+==============================================================================
+prefill budget: unlimited tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 63.603 ms
+  median gap after       : 43.992 ms
+  p99 gap                : 99.687 ms  (1.57x the victim's own median)
+  worst gap              : 103.33 ms  (1.62x)
+  prefill chunks         : 2
+  fused steps            : 0
+  forward passes         : 17
+  intruder TTFT          : 103.3 ms
+
+==============================================================================
+prefill budget: 64 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 39.759 ms
+  median gap after       : 76.05 ms
+  p99 gap                : 90.205 ms  (2.27x the victim's own median)
+  worst gap              : 90.721 ms  (2.28x)
+  prefill chunks         : 9
+  fused steps            : 0
+  forward passes         : 24
+  intruder TTFT          : 642.8 ms
+
+==============================================================================
+prefill budget: 64 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 36.552 ms
+  median gap after       : 79.399 ms
+  p99 gap                : 107.261 ms  (2.93x the victim's own median)
+  worst gap              : 108.037 ms  (2.96x)
+  prefill chunks         : 9
+  fused steps            : 8
+  forward passes         : 16
+  intruder TTFT          : 688.5 ms
+
+==============================================================================
+prefill budget: 16 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 42.301 ms
+  median gap after       : 77.45 ms
+  p99 gap                : 89.834 ms  (2.12x the victim's own median)
+  worst gap              : 90.081 ms  (2.13x)
+  prefill chunks         : 34
+  fused steps            : 0
+  forward passes         : 50
+  intruder TTFT          : 1644.8 ms
+
+==============================================================================
+prefill budget: 16 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 40.79 ms
+  median gap after       : 82.357 ms
+  p99 gap                : 93.309 ms  (2.29x the victim's own median)
+  worst gap              : 93.418 ms  (2.29x)
+  prefill chunks         : 34
+  fused steps            : 12
+  forward passes         : 38
+  intruder TTFT          : 1755.1 ms
+
+==============================================================================
+prefill budget: 4 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 40.611 ms
+  median gap after       : 74.619 ms
+  p99 gap                : 77.986 ms  (1.92x the victim's own median)
+  worst gap              : 77.987 ms  (1.92x)
+  prefill chunks         : 136
+  fused steps            : 0
+  forward passes         : 152
+  intruder TTFT          : 5032.2 ms
+
+==============================================================================
+prefill budget: 4 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 37.715 ms
+  median gap after       : 78.24 ms
+  p99 gap                : 104.689 ms  (2.78x the victim's own median)
+  worst gap              : 105.009 ms  (2.78x)
+  prefill chunks         : 136
+  fused steps            : 12
+  forward passes         : 140
+  intruder TTFT          : 5265.8 ms
+
+==============================================================================
+Summary
+==============================================================================
+    budget  fused  median before       p99   p99 x     worst   worst x  chunks  passes
+ unlimited     no          63.60     99.69    1.57    103.33      1.62       2      17
+        64     no          39.76     90.20    2.27     90.72      2.28       9      24
+        64    yes          36.55    107.26    2.93    108.04      2.96       9      16
+        16     no          42.30     89.83    2.12     90.08      2.13      34      50
+        16    yes          40.79     93.31    2.29     93.42      2.29      34      38
+         4     no          40.61     77.99    1.92     77.99      1.92     136     152
+         4    yes          37.72    104.69    2.78    105.01      2.78     136     140
+
+Budget 64: fusing the 8 mixed steps took forward passes from 24 to 16, and the worst stall from 2.28x to 2.96x.
+
+Budget 16: fusing the 12 mixed steps took forward passes from 50 to 38, and the worst stall from 2.13x to 2.29x.
+
+Budget 4: fusing the 12 mixed steps took forward passes from 152 to 140, and the worst stall from 1.92x to 2.78x.
+
+Worst-case stall: 103.3 ms unlimited vs 78.0 ms at budget 4 (1.3x better)
+Phase C bullet 1 (chunked prefill): NO IMPROVEMENT here. The unchunked baseline already stalls only 1.62x, and the best chunked run is 1.92x at budget 4 -- chunking made it worse. That is the expected shape when a prefill is cheap relative to a decode step, which is the case for a small model on a GPU: the extra scheduler steps cost more than the stall they avoid. Chunking is a latency tool for the regime where prefill dominates. Smaller budgets will not help: more steps is the cost, not the cure. Re-measure where prefill actually dominates -- a longer prompt, a larger model, or CPU execution.
+
+Wrote benchmarks\results\chunked_prefill.json

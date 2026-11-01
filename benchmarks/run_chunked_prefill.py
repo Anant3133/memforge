@@ -47,8 +47,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 from memforge_ml.model_defaults import DEFAULT_TARGET_MODEL  # noqa: E402
 from _device import (  # noqa: E402
     add_device_args,
+    add_output_arg,
     describe_device,
     peak_memory_mb,
+    vram_spill_check,
     resolve_device,
 )
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine  # noqa: E402
@@ -206,6 +208,7 @@ def main() -> int:
              "bullet 2), to separate it from chunking alone",
     )
     add_device_args(parser)
+    add_output_arg(parser, "chunked_prefill")
     parser.add_argument("--block-size", type=int, default=16)
     parser.add_argument("--kv-budget-mb", type=float, default=1024.0)
     args = parser.parse_args()
@@ -350,12 +353,34 @@ def main() -> int:
                 "for the decode batch."
             )
             if fused_rows:
+                # Derived from the fused/unfused twins in THIS run rather than
+                # asserted. The previous text claimed fusion always drops the
+                # floor to about 2x; measured on Qwen2.5-1.5B on GPU, fusion
+                # made the stall worse at every budget (2.18x -> 2.52x at 16,
+                # 2.30x -> 3.55x at 64) while helping on SmolLM2-360M. A verdict
+                # that states a conclusion the rows contradict is worse than no
+                # verdict, so this now reports what happened.
+                deltas = []
+                for fr in fused_rows:
+                    tw = next((r for r in rows
+                               if r["budget"] == fr["budget"] and not r.get("fused")),
+                              None)
+                    if tw and tw["stall_ratio"]:
+                        deltas.append((fr["budget"], tw["stall_ratio"],
+                                       fr["stall_ratio"]))
+                helped_at = [d for d in deltas if d[2] < d[1]]
+                hurt_at = [d for d in deltas if d[2] > d[1]]
                 verdict += (
-                    " With fusion (bullet 2) that second pass is gone and the "
-                    "floor drops to about 2x; what remains is no longer the "
-                    "extra pass but the chunk's own token count, since the "
+                    f" Fusion (bullet 2) removes that second pass, and here it "
+                    f"helped at {len(helped_at)}/{len(deltas)} budgets and hurt "
+                    f"at {len(hurt_at)}/{len(deltas)}: "
+                    + ", ".join(f"budget {b} {u:.2f}x->{f:.2f}x"
+                                for b, u, f in deltas)
+                    + ". Removing a forward pass is not automatically a win: the "
                     "fused pass still carries the chunk's tokens alongside the "
-                    "decode's one."
+                    "decode's one, and at larger model geometry that single "
+                    "wider pass can cost more than the two narrower ones it "
+                    "replaced."
                 )
             else:
                 verdict += (
@@ -381,6 +406,7 @@ def main() -> int:
         # None on CPU, not 0.0: torch has no CPU allocator to query, and a zero
         # would read as "measured, and it was nothing".
         "peak_memory_mb": peak_memory_mb(device),
+        "vram_spill": vram_spill_check(device, peak_memory_mb(device)),
         "config": {
             "model": args.model,
             "prompt_tokens": args.prompt_tokens,
@@ -392,8 +418,9 @@ def main() -> int:
         "verdict": verdict,
         "rows": rows,
     }
-    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    RESULTS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    out_path = Path(args.out) if getattr(args, "out", None) else RESULTS_PATH
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(f"\nWrote {RESULTS_PATH.relative_to(PROJECT_ROOT)}")
     return 0
 

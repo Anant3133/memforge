@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 import sys
 import time
 from pathlib import Path
@@ -60,8 +61,10 @@ from memforge_ml.model_defaults import (  # noqa: E402
 )
 from _device import (  # noqa: E402
     add_device_args,
+    add_output_arg,
     describe_device,
     peak_memory_mb,
+    vram_spill_check,
     resolve_device,
 )
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine  # noqa: E402
@@ -159,8 +162,23 @@ def main() -> int:
     )
     parser.add_argument("--batch-sizes", type=int, nargs="+", default=[1, 2, 4, 8])
     parser.add_argument("--lookahead", type=int, default=4)
+    parser.add_argument(
+        "--warmup", type=int, default=1,
+        help="unmeasured interleaved iterations of BOTH arms before timing, "
+             "discarded. Without this the first run pays model warmup and "
+             "allocator growth, whichever arm goes first absorbs it, and the "
+             "reported speedup depends on --max-new-tokens: the same "
+             "configuration measured 2.22x at 12 tokens and 1.17x at 32",
+    )
+    parser.add_argument(
+        "--repeats", type=int, default=3,
+        help="interleaved measured repeats; the median PAIRED speedup is "
+             "reported along with the full series, because repeats on a "
+             "thermally limited laptop drift downward rather than scattering",
+    )
     parser.add_argument("--max-new-tokens", type=int, default=32)
     add_device_args(parser)
+    add_output_arg(parser, "speculative_batching")
     parser.add_argument("--block-size", type=int, default=16)
     parser.add_argument("--kv-budget-mb", type=float, default=512.0)
     args = parser.parse_args()
@@ -199,13 +217,42 @@ def main() -> int:
         prompts = PROMPT_POOL[:batch]
         banner(f"batch = {batch}")
 
-        plain = run_scenario(
-            model, tokenizer, None, 0, prompts,
-            args.max_new_tokens, args.block_size, args.kv_budget_mb,
-        )
-        spec = run_scenario(
-            model, tokenizer, draft_model, args.lookahead, prompts,
-            args.max_new_tokens, args.block_size, args.kv_budget_mb,
+        # Warmup, discarded. Both arms, so neither is the one that pays it.
+        for _ in range(max(0, args.warmup)):
+            run_scenario(
+                model, tokenizer, None, 0, prompts,
+                args.max_new_tokens, args.block_size, args.kv_budget_mb,
+            )
+            run_scenario(
+                model, tokenizer, draft_model, args.lookahead, prompts,
+                args.max_new_tokens, args.block_size, args.kv_budget_mb,
+            )
+
+        # Interleaved and paired: each repeat times plain then spec back to
+        # back, so dividing within a repeat cancels whatever the machine was
+        # doing at that moment. The series is kept because these repeats have
+        # a downward trend under sustained load, and a median alone hides that.
+        speedup_series = []
+        plain_tps_series = []
+        spec_tps_series = []
+        plain = spec = None
+        for _ in range(max(1, args.repeats)):
+            plain = run_scenario(
+                model, tokenizer, None, 0, prompts,
+                args.max_new_tokens, args.block_size, args.kv_budget_mb,
+            )
+            spec = run_scenario(
+                model, tokenizer, draft_model, args.lookahead, prompts,
+                args.max_new_tokens, args.block_size, args.kv_budget_mb,
+            )
+            plain_tps_series.append(plain["tokens_per_s"])
+            spec_tps_series.append(spec["tokens_per_s"])
+            if plain["tokens_per_s"]:
+                speedup_series.append(
+                    spec["tokens_per_s"] / plain["tokens_per_s"]
+                )
+        speedup_median = (
+            statistics.median(speedup_series) if speedup_series else None
         )
 
         # Losslessness is the precondition for every other number here being
@@ -230,10 +277,14 @@ def main() -> int:
         print(f"  draft acceptance rate               : {spec['draft_acceptance_rate']}")
         print(f"  tokens per target pass  spec / plain: "
               f"{spec['tokens_per_target_pass']} / {plain['tokens_per_target_pass']}")
-        print(f"  wall-clock tok/s        spec / plain: "
-              f"{spec['tokens_per_s']} / {plain['tokens_per_s']}  "
-              f"({spec['tokens_per_s'] / plain['tokens_per_s']:.2f}x)"
-              if plain["tokens_per_s"] else "")
+        if speedup_median is not None:
+            print(f"  wall-clock speedup (median of {len(speedup_series)})"
+                  f"     : {speedup_median:.3f}x"
+                  f"  [{min(speedup_series):.3f}-{max(speedup_series):.3f}]")
+            print(f"  speedup series                      : "
+                  f"{[round(x, 3) for x in speedup_series]}")
+            print(f"  spec tok/s series                   : {spec_tps_series}")
+            print(f"  plain tok/s series                  : {plain_tps_series}")
 
         rows.append({
             "batch_size": batch,
@@ -243,13 +294,54 @@ def main() -> int:
                 k: v for k, v in plain.items() if k != "token_ids"
             },
             "speedup": (
-                round(spec["tokens_per_s"] / plain["tokens_per_s"], 3)
-                if plain["tokens_per_s"] else None
+                round(speedup_median, 3) if speedup_median is not None else None
             ),
+            "speedup_series": [round(x, 3) for x in speedup_series],
+            "speedup_min": (
+                round(min(speedup_series), 3) if speedup_series else None
+            ),
+            "speedup_max": (
+                round(max(speedup_series), 3) if speedup_series else None
+            ),
+            "plain_tok_per_s_series": plain_tps_series,
+            "spec_tok_per_s_series": spec_tps_series,
+            "repeats": len(speedup_series),
+            "warmup": max(0, args.warmup),
         })
 
     banner("Verdict")
     all_lossless = all(r["output_identical"] for r in rows)
+
+    # --self-draft makes the target its own draft, so under exact arithmetic
+    # every drafted token must be accepted: the proposing model and the
+    # verifying model are the same weights reading the same context. An
+    # acceptance rate below 1.0 therefore does not mean the draft guessed
+    # badly -- it means the batched verify pass computed different logits than
+    # the draft pass did, which is a numerical bug in the engine and not a
+    # property of the models.
+    #
+    # This was found by running Qwen2.5-1.5B in fp16 on CUDA, where acceptance
+    # fell to 0.9375 from batch 4 upward while SmolLM2-360M stayed at exactly
+    # 1.0 for every batch size up to 8. Nothing checked it, so the harness
+    # printed the number and still called the run lossless. The whole point of
+    # this flag is to be an invariant, so it is now enforced as one.
+    selfdraft_exact = True
+    if args.self_draft:
+        for r in rows:
+            rate = r["speculative"].get("draft_acceptance_rate")
+            if rate is None or rate < 1.0:
+                selfdraft_exact = False
+                verdict_prefix = (
+                    f"SELF-DRAFT INVARIANT VIOLATED at batch "
+                    f"{r['batch_size']}: acceptance {rate} but the draft IS the "
+                    f"target, so it must be exactly 1.0. The batched verify pass "
+                    f"disagrees with the draft pass on identical weights and "
+                    f"context -- treat as a numerical correctness bug."
+                )
+                print(f"  !! {verdict_prefix}")
+        if selfdraft_exact:
+            print("  self-draft invariant holds: acceptance is exactly 1.0 at "
+                  "every batch size.")
     # A batch of one cannot save anything, so it is excluded from the
     # denominator rather than counted as a failure to compose.
     multi = [r for r in rows if r["batch_size"] > 1]
@@ -260,6 +352,12 @@ def main() -> int:
     ]
     verdict_lines = [
         f"Lossless at every batch size: {all_lossless}.",
+        *([] if not args.self_draft else [
+            f"Self-draft acceptance exactly 1.0 at every batch size: "
+            f"{selfdraft_exact}."
+            + ("" if selfdraft_exact else
+               " Anything less is an engine bug, not a draft-quality result.")
+        ]),
         f"Batched verification saved verify passes in "
         f"{len(composed)}/{len(multi)} multi-sequence configurations "
         f"(a batch of one has nothing to batch).",
@@ -325,6 +423,7 @@ def main() -> int:
         # None on CPU, not 0.0: torch has no CPU allocator to query, and a zero
         # would read as "measured, and it was nothing".
         "peak_memory_mb": peak_memory_mb(device),
+        "vram_spill": vram_spill_check(device, peak_memory_mb(device)),
         "config": {
             "model": args.model,
             "draft_model": "(self)" if args.self_draft else args.draft_model,
@@ -334,13 +433,16 @@ def main() -> int:
             "max_new_tokens": args.max_new_tokens,
             "block_size": args.block_size,
         },
+        "all_lossless": all_lossless,
+        "self_draft_exact": None if not args.self_draft else selfdraft_exact,
         "verdict": verdict_lines,
         "rows": rows,
     }
-    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    RESULTS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    out_path = Path(args.out) if getattr(args, "out", None) else RESULTS_PATH
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(f"\nWrote {RESULTS_PATH.relative_to(PROJECT_ROOT)}")
-    return 0 if all_lossless else 1
+    return 0 if (all_lossless and selfdraft_exact) else 1
 
 
 if __name__ == "__main__":

@@ -56,6 +56,23 @@ def add_device_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_output_arg(parser: argparse.ArgumentParser, default_name: str) -> None:
+    """
+    Add `--out`, so one run does not overwrite another's results.
+
+    Every harness wrote to a single hardcoded path under benchmarks/results/,
+    which means comparing two models required an external wrapper to copy the
+    file away between runs -- and if a run failed after the previous one
+    succeeded, the stale file was still sitting there looking current. Scaling
+    to a second model made this the first thing that had to be worked around.
+    """
+    parser.add_argument(
+        "--out", default=None, metavar="PATH",
+        help=f"write the JSON here instead of "
+             f"benchmarks/results/{default_name}.json",
+    )
+
+
 def resolve_device(args: argparse.Namespace) -> Tuple[str, torch.dtype]:
     """
     Turn `--device`/`--dtype` into a concrete pair, or fail loudly.
@@ -183,6 +200,51 @@ def peak_memory_mb(device: str) -> Any:
         index = int(device.split(":", 1)[1]) if ":" in device else 0
         return round(torch.cuda.max_memory_allocated(index) / (1024 * 1024), 2)
     return None
+
+
+def vram_spill_check(device: str, peak_mb: Any) -> Dict[str, Any]:
+    """
+    Did this run exceed the card and quietly spill into system memory?
+
+    On Windows, WDDM lets CUDA page device memory out to host RAM instead of
+    failing an allocation. That is the worst available outcome for a benchmark:
+    nothing raises, the JSON still says `cuda`, and the throughput collapses by
+    3-5x because every access crosses PCIe. A context sweep here peaked at
+    6687 MB on a 6141 MiB card and reported 3.73 tok/s as a GPU number -- the
+    same run with a KV budget that fit measured 11.42.
+
+    This is the same failure class `resolve_device` refuses for `--device cuda`
+    on a CPU-only build: a plausible number carrying a wrong label. So it is
+    reported in the payload and printed loudly rather than left for a reader to
+    notice.
+    """
+    result: Dict[str, Any] = {"checked": False, "spilled": None, "peak_mb": peak_mb}
+    if not (device.startswith("cuda") and torch.cuda.is_available()):
+        return result
+    if not isinstance(peak_mb, (int, float)):
+        return result
+    index = int(device.split(":", 1)[1]) if ":" in device else 0
+    total_mb = torch.cuda.get_device_properties(index).total_memory / (1024 * 1024)
+    # 0.95 rather than 1.0: the driver and the display reserve a slice, so a
+    # peak that close to the ceiling has already started evicting.
+    spilled = peak_mb >= total_mb * 0.95
+    result.update({
+        "checked": True,
+        "spilled": bool(spilled),
+        "vram_total_mb": round(total_mb, 2),
+        "threshold_mb": round(total_mb * 0.95, 2),
+    })
+    if spilled:
+        print(
+            f"\n  !! VRAM SPILL: peak allocation {peak_mb:.0f} MB against a "
+            f"{total_mb:.0f} MB card.\n"
+            f"     CUDA on Windows pages to host RAM instead of failing, so the "
+            f"timings above are\n"
+            f"     contaminated by PCIe traffic and are NOT valid GPU numbers. "
+            f"Re-run with a smaller\n"
+            f"     --kv-budget-mb, fewer --contexts, or --skip-batched."
+        )
+    return result
 
 
 def reset_peak_memory(device: str) -> None:

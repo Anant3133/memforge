@@ -43,8 +43,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 from memforge_ml.model_defaults import DEFAULT_TARGET_MODEL  # noqa: E402
 from _device import (  # noqa: E402
     add_device_args,
+    add_output_arg,
     describe_device,
     peak_memory_mb,
+    vram_spill_check,
     resolve_device,
 )
 from memforge_ml.runtime.continuous_engine import ContinuousBatchingEngine  # noqa: E402
@@ -161,6 +163,7 @@ def main() -> int:
     parser.add_argument("--prefix-tokens", type=int, default=512,
                         help="length of the shared system prompt, in tokens")
     add_device_args(parser)
+    add_output_arg(parser, "prefix_sharing")
     parser.add_argument("--block-size", type=int, default=16)
     parser.add_argument("--num-blocks", type=int, default=600)
     args = parser.parse_args()
@@ -260,6 +263,7 @@ def main() -> int:
         # None on CPU, not 0.0: torch has no CPU allocator to query, and a zero
         # would read as "measured, and it was nothing".
         "peak_memory_mb": peak_memory_mb(device),
+        "vram_spill": vram_spill_check(device, peak_memory_mb(device)),
         "config": {
             "model": args.model,
             "prefix_tokens": args.prefix_tokens,
@@ -271,8 +275,9 @@ def main() -> int:
         "all_outputs_identical": not mismatches,
         "rows": rows,
     }
-    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    RESULTS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    out_path = Path(args.out) if getattr(args, "out", None) else RESULTS_PATH
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(f"\nWrote {RESULTS_PATH.relative_to(PROJECT_ROOT)}")
 
     return 1 if mismatches else 0

@@ -1,0 +1,123 @@
+
+==============================================================================
+MemForge Phase C — does a long prompt stall in-flight decoding?
+==============================================================================
+model            : Qwen/Qwen2.5-1.5B-Instruct
+intruding prompt : 2048 tokens
+victim           : 32-token prompt, 16 tokens generated
+budgets          : [0, 128, 32, 8]  (0 = unlimited, the old behaviour)
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  33%|###2      | 111/338 [00:00<00:00, 1068.96it/s]Loading weights:  64%|######4   | 218/338 [00:00<00:00, 1026.22it/s]Loading weights:  95%|#########4| 321/338 [00:00<00:00, 957.88it/s] Loading weights: 100%|##########| 338/338 [00:00<00:00, 989.32it/s]
+
+==============================================================================
+prefill budget: unlimited tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 40.345 ms
+  median gap after       : 38.846 ms
+  p99 gap                : 665.526 ms  (16.5x the victim's own median)
+  worst gap              : 761.481 ms  (18.87x)
+  prefill chunks         : 2
+  fused steps            : 0
+  forward passes         : 17
+  intruder TTFT          : 761.5 ms
+
+==============================================================================
+prefill budget: 128 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 38.49 ms
+  median gap after       : 73.61 ms
+  p99 gap                : 91.447 ms  (2.38x the victim's own median)
+  worst gap              : 92.858 ms  (2.41x)
+  prefill chunks         : 17
+  fused steps            : 0
+  forward passes         : 33
+  intruder TTFT          : 1068.1 ms
+
+==============================================================================
+prefill budget: 128 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 35.969 ms
+  median gap after       : 85.393 ms
+  p99 gap                : 94.65 ms  (2.63x the victim's own median)
+  worst gap              : 95.193 ms  (2.65x)
+  prefill chunks         : 17
+  fused steps            : 12
+  forward passes         : 21
+  intruder TTFT          : 1218.5 ms
+
+==============================================================================
+prefill budget: 32 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 38.028 ms
+  median gap after       : 75.144 ms
+  p99 gap                : 96.802 ms  (2.55x the victim's own median)
+  worst gap              : 98.387 ms  (2.59x)
+  prefill chunks         : 65
+  fused steps            : 0
+  forward passes         : 81
+  intruder TTFT          : 2816.2 ms
+
+==============================================================================
+prefill budget: 32 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 38.417 ms
+  median gap after       : 77.193 ms
+  p99 gap                : 86.433 ms  (2.25x the victim's own median)
+  worst gap              : 87.426 ms  (2.28x)
+  prefill chunks         : 65
+  fused steps            : 12
+  forward passes         : 69
+  intruder TTFT          : 2814.4 ms
+
+==============================================================================
+prefill budget: 8 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 40.393 ms
+  median gap after       : 77.917 ms
+  p99 gap                : 80.729 ms  (2.0x the victim's own median)
+  worst gap              : 80.835 ms  (2.0x)
+  prefill chunks         : 260
+  fused steps            : 0
+  forward passes         : 276
+  intruder TTFT          : 9397.7 ms
+
+==============================================================================
+prefill budget: 8 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 37.012 ms
+  median gap after       : 72.946 ms
+  p99 gap                : 92.0 ms  (2.49x the victim's own median)
+  worst gap              : 93.248 ms  (2.52x)
+  prefill chunks         : 260
+  fused steps            : 12
+  forward passes         : 264
+  intruder TTFT          : 9570.8 ms
+
+==============================================================================
+Summary
+==============================================================================
+    budget  fused  median before       p99   p99 x     worst   worst x  chunks  passes
+ unlimited     no          40.34    665.53   16.50    761.48     18.87       2      17
+       128     no          38.49     91.45    2.38     92.86      2.41      17      33
+       128    yes          35.97     94.65    2.63     95.19      2.65      17      21
+        32     no          38.03     96.80    2.55     98.39      2.59      65      81
+        32    yes          38.42     86.43    2.25     87.43      2.28      65      69
+         8     no          40.39     80.73    2.00     80.83      2.00     260     276
+         8    yes          37.01     92.00    2.49     93.25      2.52     260     264
+
+Budget 128: fusing the 12 mixed steps took forward passes from 33 to 21, and the worst stall from 2.41x to 2.65x.
+
+Budget 32: fusing the 12 mixed steps took forward passes from 81 to 69, and the worst stall from 2.59x to 2.28x.
+
+Budget 8: fusing the 12 mixed steps took forward passes from 276 to 264, and the worst stall from 2.00x to 2.52x.
+
+Worst-case stall: 761.5 ms unlimited vs 80.8 ms at budget 8 (9.4x better)
+Phase C bullet 1 (chunked prefill): worst-case stall cut 9.4x, from 18.87x the victim's median to 2.0x at budget 8. Target met: in-flight decoding is effectively unaffected.
+
+Wrote benchmarks\results\chunked_prefill.json

@@ -1,0 +1,116 @@
+  WARNING: fp16 on CPU has no hardware support. Any timing below measures emulation, not the engine.
+
+==============================================================================
+Phase D - speculative decoding inside continuous batching
+==============================================================================
+target model : Qwen/Qwen2.5-1.5B-Instruct
+draft model  : (self)
+lookahead K  : 4  (scheduler reserves K+1 = 5 slots per sequence per step)
+device       : cpu torch.float16
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:   0%|          | 1/338 [00:01<06:01,  1.07s/it]Loading weights:  55%|#####4    | 185/338 [00:01<00:00, 216.84it/s]Loading weights:  86%|########6 | 292/338 [00:01<00:00, 291.33it/s]Loading weights: 100%|##########| 338/338 [00:01<00:00, 228.96it/s]
+
+==============================================================================
+batch = 1
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 12
+  speculative rounds                  : 2
+  verify passes (batched)             : 2
+  verify passes (per-sequence)        : 2
+  verify passes saved                 : 0
+  all target passes (incl. prefill)   : 4
+  sequences verified per round        : 1.0
+  draft acceptance rate               : 1.0
+  tokens per target pass  spec / plain: 3.0 / 1.0
+  wall-clock tok/s        spec / plain: 3.66 / 3.52  (1.04x)
+
+==============================================================================
+batch = 2
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 24
+  speculative rounds                  : 2
+  verify passes (batched)             : 2
+  verify passes (per-sequence)        : 4
+  verify passes saved                 : 2
+  all target passes (incl. prefill)   : 5
+  sequences verified per round        : 2.0
+  draft acceptance rate               : 1.0
+  tokens per target pass  spec / plain: 4.8 / 1.846
+  wall-clock tok/s        spec / plain: 4.04 / 7.72  (0.52x)
+
+==============================================================================
+batch = 3
+==============================================================================
+  output identical to non-speculative : False
+  !! speculation changed the output -- the numbers below are void
+  tokens generated                    : 36
+  speculative rounds                  : 2
+  verify passes (batched)             : 2
+  verify passes (per-sequence)        : 6
+  verify passes saved                 : 4
+  all target passes (incl. prefill)   : 6
+  sequences verified per round        : 3.0
+  draft acceptance rate               : 1.0
+  tokens per target pass  spec / plain: 6.0 / 2.571
+  wall-clock tok/s        spec / plain: 4.04 / 7.75  (0.52x)
+
+==============================================================================
+batch = 4
+==============================================================================
+  output identical to non-speculative : False
+  !! speculation changed the output -- the numbers below are void
+  tokens generated                    : 48
+  speculative rounds                  : 2
+  verify passes (batched)             : 2
+  verify passes (per-sequence)        : 8
+  verify passes saved                 : 6
+  all target passes (incl. prefill)   : 7
+  sequences verified per round        : 4.0
+  draft acceptance rate               : 1.0
+  tokens per target pass  spec / plain: 6.857 / 3.2
+  wall-clock tok/s        spec / plain: 4.06 / 8.14  (0.50x)
+
+==============================================================================
+batch = 6
+==============================================================================
+  output identical to non-speculative : False
+  !! speculation changed the output -- the numbers below are void
+  tokens generated                    : 72
+  speculative rounds                  : 2
+  verify passes (batched)             : 2
+  verify passes (per-sequence)        : 12
+  verify passes saved                 : 10
+  all target passes (incl. prefill)   : 9
+  sequences verified per round        : 6.0
+  draft acceptance rate               : 1.0
+  tokens per target pass  spec / plain: 8.0 / 4.235
+  wall-clock tok/s        spec / plain: 4.01 / 8.42  (0.48x)
+
+==============================================================================
+batch = 8
+==============================================================================
+  output identical to non-speculative : False
+  !! speculation changed the output -- the numbers below are void
+  tokens generated                    : 96
+  speculative rounds                  : 2
+  verify passes (batched)             : 2
+  verify passes (per-sequence)        : 16
+  verify passes saved                 : 14
+  all target passes (incl. prefill)   : 11
+  sequences verified per round        : 8.0
+  draft acceptance rate               : 1.0
+  tokens per target pass  spec / plain: 8.727 / 5.053
+  wall-clock tok/s        spec / plain: 4.12 / 8.38  (0.49x)
+
+==============================================================================
+Verdict
+==============================================================================
+  - Lossless at every batch size: False.
+  - Batched verification saved verify passes in 5/5 multi-sequence configurations (a batch of one has nothing to batch).
+  - Peak sequences verified per target pass: 8.0. A per-sequence verifier would have needed that many passes per round, so this is the factor by which speculation and batching compose rather than conflict.
+  - Wall-clock speedup on this CPU: 0.48x-1.04x.
+  - Values below 1.0 are not a defect of the composition. The draft runs K passes serially per sequence per round, and this model pair (Qwen/Qwen2.5-1.5B-Instruct against itself) is too close in cost for that to pay.
+  - The plan's 2-3x claim is a GPU claim about a pair with a real cost gap, so it is neither confirmed nor refuted here. Re-run with --device cuda to measure it on a GPU.
+
+Wrote benchmarks\results\speculative_batching.json

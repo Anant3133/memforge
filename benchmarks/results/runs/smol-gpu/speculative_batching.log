@@ -1,0 +1,68 @@
+
+==============================================================================
+Phase D - speculative decoding inside continuous batching
+==============================================================================
+target model : HuggingFaceTB/SmolLM2-360M-Instruct
+draft model  : HuggingFaceTB/SmolLM2-135M-Instruct
+lookahead K  : 4  (scheduler reserves K+1 = 5 slots per sequence per step)
+device       : cuda:0 torch.float16
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  76%|#######5  | 219/290 [00:00<00:00, 2165.90it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 2244.28it/s]
+Loading weights:   0%|          | 0/272 [00:00<?, ?it/s]Loading weights:  74%|#######4  | 202/272 [00:00<00:00, 2009.59it/s]Loading weights: 100%|##########| 272/272 [00:00<00:00, 2060.17it/s]
+
+==============================================================================
+batch = 1
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 16
+  speculative rounds                  : 4
+  verify passes (batched)             : 4
+  verify passes (per-sequence)        : 4
+  verify passes saved                 : 0
+  all target passes (incl. prefill)   : 6
+  sequences verified per round        : 1.0
+  draft acceptance rate               : 0.625
+  tokens per target pass  spec / plain: 2.667 / 1.0
+  wall-clock tok/s        spec / plain: 15.66 / 16.15  (0.97x)
+
+==============================================================================
+batch = 2
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 32
+  speculative rounds                  : 4
+  verify passes (batched)             : 4
+  verify passes (per-sequence)        : 7
+  verify passes saved                 : 3
+  all target passes (incl. prefill)   : 10
+  sequences verified per round        : 1.75
+  draft acceptance rate               : 0.6429
+  tokens per target pass  spec / plain: 3.2 / 1.882
+  wall-clock tok/s        spec / plain: 19.95 / 42.02  (0.47x)
+
+==============================================================================
+batch = 4
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 64
+  speculative rounds                  : 5
+  verify passes (batched)             : 5
+  verify passes (per-sequence)        : 15
+  verify passes saved                 : 10
+  all target passes (incl. prefill)   : 13
+  sequences verified per round        : 3.0
+  draft acceptance rate               : 0.6
+  tokens per target pass  spec / plain: 4.923 / 3.368
+  wall-clock tok/s        spec / plain: 20.69 / 65.11  (0.32x)
+
+==============================================================================
+Verdict
+==============================================================================
+  - Lossless at every batch size: True.
+  - Batched verification saved verify passes in 2/2 multi-sequence configurations (a batch of one has nothing to batch).
+  - Peak sequences verified per target pass: 3.0. A per-sequence verifier would have needed that many passes per round, so this is the factor by which speculation and batching compose rather than conflict.
+  - Wall-clock speedup on NVIDIA GeForce RTX 4050 Laptop GPU: 0.32x-0.97x.
+  - Values below 1.0 are not a defect of the composition. The draft runs K passes serially per sequence per round, and this model pair (HuggingFaceTB/SmolLM2-360M-Instruct against HuggingFaceTB/SmolLM2-135M-Instruct) is too close in cost for that to pay.
+  - Note that this is *worse* on GPU than on CPU, which is the expected direction: a single target pass on a GPU is latency-bound rather than compute-bound, so it is already cheap, and the draft's serial passes dominate a larger share of the round. Speculation needs the target pass to be genuinely expensive before skipping some of them pays -- that means a much larger target, not merely a faster device.
+  - So the plan's 2-3x claim is still neither confirmed nor refuted: it is about an 8B-class target, and this GPU has 6.0 GB of VRAM, which will not hold one in fp16.
+
+Wrote benchmarks\results\speculative_batching.json

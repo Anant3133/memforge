@@ -1,0 +1,40 @@
+
+==============================================================================
+Phase D - speculative decoding inside continuous batching
+==============================================================================
+target model : Qwen/Qwen2.5-1.5B-Instruct
+draft model  : Qwen/Qwen2.5-0.5B-Instruct
+lookahead K  : 4  (scheduler reserves K+1 = 5 slots per sequence per step)
+device       : cpu torch.float32
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:   0%|          | 1/338 [00:01<05:39,  1.01s/it]Loading weights:  58%|#####7    | 195/338 [00:01<00:00, 235.71it/s]Loading weights:  86%|########6 | 291/338 [00:01<00:00, 197.77it/s]Loading weights: 100%|##########| 338/338 [00:01<00:00, 185.72it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  78%|#######8  | 227/290 [00:00<00:00, 2247.44it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 2265.62it/s]
+
+==============================================================================
+batch = 1
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 128
+  speculative rounds                  : 44
+  verify passes (batched)             : 44
+  verify passes (per-sequence)        : 44
+  verify passes saved                 : 0
+  all target passes (incl. prefill)   : 48
+  sequences verified per round        : 1.0
+  draft acceptance rate               : 0.4545
+  tokens per target pass  spec / plain: 2.667 / 1.0
+  wall-clock speedup (median of 5)     : 0.881x  [0.876-0.886]
+  speedup series                      : [0.881, 0.886, 0.881, 0.882, 0.876]
+  spec tok/s series                   : [6.5, 6.5, 6.49, 6.49, 6.45]
+  plain tok/s series                  : [7.38, 7.34, 7.37, 7.36, 7.36]
+
+==============================================================================
+Verdict
+==============================================================================
+  - Lossless at every batch size: True.
+  - Batched verification saved verify passes in 0/0 multi-sequence configurations (a batch of one has nothing to batch).
+  - Peak sequences verified per target pass: 1.0. A per-sequence verifier would have needed that many passes per round, so this is the factor by which speculation and batching compose rather than conflict.
+  - Wall-clock speedup on this CPU: 0.88x-0.88x.
+  - Values below 1.0 are not a defect of the composition. The draft runs K passes serially per sequence per round, and this model pair (Qwen/Qwen2.5-1.5B-Instruct against Qwen/Qwen2.5-0.5B-Instruct) is too close in cost for that to pay.
+  - The plan's 2-3x claim is a GPU claim about a pair with a real cost gap, so it is neither confirmed nor refuted here. Re-run with --device cuda to measure it on a GPU.
+
+Wrote benchmarks\results\speculative_batching.json
