@@ -186,6 +186,23 @@ Definition of done: the worst decode stall caused by an incoming long prompt
 
 ---
 
+## 5b. Qwen3-14B (downloaded earlier, now run) — ✅
+
+fp16 needs ~29.5 GB; the shared card had ~25 GB free. `memforge_ml/models/int8_linear.py`
+quantises every Linear to int8 (per-output-channel, scale applied to the output) straight
+onto the GPU, so the fp16 model never has to fit. It changes numerics, so only comparisons
+*within* the int8 model are valid, which is all the checks need.
+
+* GPU int8, 3 rounds: paged / contiguous = **0.988 / 0.987 / 0.991 / 0.988** at 128 / 512 /
+  1024 / 2048 tokens (meets 0.95 even without graphs: the dequantising step is expensive
+  enough to hide the paging overhead), output identical; prefix sharing 0.333 blocks, 0.27
+  prefill, 0 leaks; chunked-prefill stall 2.63 -> 2.03 at budget 4 (target 2.0, just over).
+* CPU fp32, 1 run: paged 1.00x, prefix 0.333, stall 6.77 -> 1.98.
+
+Open: fp16 14B (needs ~30 GB free); speculation on 14B not run.
+
+---
+
 ## 6. Things that now work and were not shown before
 
 | claim | evidence |
@@ -193,7 +210,8 @@ Definition of done: the worst decode stall caused by an incoming long prompt
 | Paged output = contiguous output, on 7 models up to 8B | every context-sweep row, 3 rounds |
 | Prefix sharing: 4 requests → 0.333× blocks, 0.27× prefill work, 0 leaks, identical output | 7 models × 3 rounds, identical every time |
 | Soak: 110 requests, concurrency 8, no leaks, RSS flat | 0.5B, 1.5B, 3B, 7B, Qwen3-8B: 0 leaked blocks; RSS growth 3.7–25 MB vs 50 MB limit |
-| Test suite | 400 passed, 2 skipped (GPU-only) on CPU; the GPU tests pass on the A100 |
+| Test suite | CPU: 417 passed, 20 skipped (GPU-only), 3 consecutive runs; GPU: 27 passed, 3 consecutive runs |
+| Regression gate | `scripts/check_targets.py`: 0 hard failures; fails on output mismatch, leaked blocks, unexplained speculative divergence, or a >5% metric drop |
 
 ---
 

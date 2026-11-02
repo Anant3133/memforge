@@ -50,7 +50,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 from transformers.cache_utils import DynamicCache  # noqa: E402
 
 from memforge_ml.model_defaults import DEFAULT_TARGET_MODEL  # noqa: E402
-from _device import (  # noqa: E402
+from _device import (
+    load_causal_lm,  # noqa: E402
     add_device_args,
     add_output_arg,
     describe_device,
@@ -356,7 +357,7 @@ def main() -> int:
     print(f"device      : {device} {dtype} (torch {torch.__version__})")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype).to(device)
+    model = load_causal_lm(args.model, dtype, device)
     model.eval()
     # Must match where the model actually is, and in the same dtype. A pool on
     # the wrong device fails deep inside the scatter with "source is on cuda:0,

@@ -264,3 +264,29 @@ def synchronize(device: str) -> None:
     """
     if device.startswith("cuda") and torch.cuda.is_available():
         torch.cuda.synchronize()
+
+
+def load_causal_lm(model_name: str, dtype: torch.dtype, device: str):
+    """
+    `AutoModelForCausalLM.from_pretrained(...).to(device)`, or an int8 weight-only
+    load when MEMFORGE_INT8=1 on CUDA.
+
+    The int8 path loads on the CPU, quantises each Linear straight onto the GPU,
+    then moves the rest (embeddings, norms, lm_head), so the full-precision model
+    never has to fit on the card. It exists so a 14B model can run where fp16
+    does not; results from it must only be compared within the same int8 model.
+    """
+    import os
+    from transformers import AutoModelForCausalLM
+
+    if os.environ.get("MEMFORGE_INT8") == "1":
+        if not str(device).startswith("cuda"):
+            raise ValueError("MEMFORGE_INT8=1 needs a CUDA device")
+        from memforge_ml.models.int8_linear import quantize_linears_int8
+        model = AutoModelForCausalLM.from_pretrained(model_name, dtype=dtype)
+        n = quantize_linears_int8(model, device)
+        model = model.to(device)
+        model._memforge_int8 = True
+        print(f"weights      : int8 weight-only ({n} linear layers); compare only within this model")
+        return model
+    return AutoModelForCausalLM.from_pretrained(model_name, dtype=dtype).to(device)

@@ -59,4 +59,24 @@ Target: paged within 5% of contiguous (>= 0.95). Three baselines are shown becau
 | Qwen2.5-1.5B-Instruct | 8.46 [7.69-12.69] n=4 | 4.31 [2.07-5.98] n=4 | 2.84 [2.60-4.00] n=4 | **1.96 [1.73-2.10] n=4** | False |
 | Qwen2.5-3B-Instruct | 7.42 [6.84-10.45] n=4 | 5.07 [3.35-5.39] n=4 | 2.86 [2.64-3.62] n=4 | **1.84 [1.80-2.05] n=4** | False |
 | Qwen2.5-7B-Instruct | 6.34 [5.53-6.90] n=4 | 3.97 [2.83-6.12] n=4 | 2.80 [2.06-4.41] n=4 | **1.82 [1.70-2.59] n=4** | False |
+| Qwen3-14B | 6.77 [6.77-6.77] n=1 | 3.91 [3.91-3.91] n=1 | 4.78 [4.78-4.78] n=1 | **1.98 [1.98-1.98] n=1** | True |
 | SmolLM2-360M-Instruct | 8.35 [6.74-8.82] n=4 | 5.71 [2.39-8.81] n=4 | 2.75 [2.36-4.43] n=4 | **2.10 [1.60-2.41] n=4** | False |
+
+## 4. Qwen3-14B
+
+GPU: int8 weight-only (own loader; the fp16 model needs ~29.5 GB and the shared card had ~25 GB free), compared only within the int8 model. CPU: fp32, one run.
+
+| backend | check | result | outputs identical |
+|---|---|---|---|
+| GPU int8 | paged / contiguous @ 128 tokens | 0.988 [0.988-0.989] n=3 | True |
+| GPU int8 | paged / contiguous @ 512 tokens | 0.987 [0.986-0.990] n=3 | True |
+| GPU int8 | paged / contiguous @ 1024 tokens | 0.991 [0.989-0.992] n=3 | True |
+| GPU int8 | paged / contiguous @ 2048 tokens | 0.988 [0.988-0.996] n=3 | True |
+| GPU int8 | prefix sharing N=4 (block ratio / prefill ratio / leaked) | 0.333 / 0.27 / 0 | True |
+| GPU int8 | chunked-prefill stall, budget 0 (target <= 2.0) | 2.63 [2.56-2.63] n=3 | n/a |
+| GPU int8 | chunked-prefill stall, budget 4 (target <= 2.0) | 2.03 [2.02-2.04] n=3 | n/a |
+| CPU fp32 | paged / contiguous @ 128 tokens | 1.002 [1.002-1.002] n=1 | True |
+| CPU fp32 | paged / contiguous @ 512 tokens | 0.996 [0.996-0.996] n=1 | True |
+| CPU fp32 | prefix sharing N=4 (block ratio / prefill ratio / leaked) | 0.333 / 0.27 / 0 | True |
+| CPU fp32 | chunked-prefill stall, budget 0 (target <= 2.0) | 6.77 [6.77-6.77] n=1 | n/a |
+| CPU fp32 | chunked-prefill stall, budget 4 (target <= 2.0) | 1.98 [1.98-1.98] n=1 | n/a |

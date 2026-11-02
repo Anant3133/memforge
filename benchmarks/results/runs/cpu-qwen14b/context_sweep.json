@@ -1,0 +1,92 @@
+{
+  "benchmark": "context_sweep",
+  "phase": "A",
+  "generated_at": "2026-11-02T17:42:25",
+  "platform": {
+    "platform": "Linux-5.15.0-1053-nvidia-x86_64-with-glibc2.39",
+    "system": "Linux",
+    "python": "3.12.3",
+    "torch": "2.8.0+cu126",
+    "torch_cuda": "12.6",
+    "cuda_available": true,
+    "device": "cpu",
+    "dtype": "torch.float32",
+    "device_name": null,
+    "compute_capability": null,
+    "vram_total_mb": null,
+    "vram_free_mb": null
+  },
+  "peak_memory_mb": null,
+  "vram_spill": {
+    "checked": false,
+    "spilled": null,
+    "peak_mb": null
+  },
+  "config": {
+    "model": "Qwen/Qwen3-14B",
+    "contexts": [
+      128,
+      512
+    ],
+    "steps": 8,
+    "repeats": 3,
+    "warmup": 2,
+    "block_size": 16,
+    "concurrency": null
+  },
+  "model_geometry": {
+    "num_layers": 40,
+    "num_kv_heads": 8,
+    "head_dim": 128,
+    "bytes_per_token": 327680
+  },
+  "all_outputs_identical": true,
+  "rows": [
+    {
+      "context_tokens": 128,
+      "contiguous_tok_per_s": 0.363,
+      "paged_tok_per_s": 0.364,
+      "relative_throughput": 1.0025,
+      "relative_throughput_min": 0.9584,
+      "relative_throughput_max": 1.0599,
+      "within_5_percent": true,
+      "verdict_decided": false,
+      "contiguous_prefill_s": 11.1553,
+      "paged_prefill_s": 11.0132,
+      "output_identical": true,
+      "contiguous_samples": [
+        0.363,
+        0.347,
+        0.378
+      ],
+      "paged_samples": [
+        0.364,
+        0.368,
+        0.363
+      ]
+    },
+    {
+      "context_tokens": 512,
+      "contiguous_tok_per_s": 0.384,
+      "paged_tok_per_s": 0.381,
+      "relative_throughput": 0.9964,
+      "relative_throughput_min": 0.7636,
+      "relative_throughput_max": 0.9981,
+      "within_5_percent": true,
+      "verdict_decided": false,
+      "contiguous_prefill_s": 15.7057,
+      "paged_prefill_s": 15.4789,
+      "output_identical": true,
+      "contiguous_samples": [
+        0.384,
+        0.389,
+        0.383
+      ],
+      "paged_samples": [
+        0.383,
+        0.297,
+        0.381
+      ]
+    }
+  ]
+}

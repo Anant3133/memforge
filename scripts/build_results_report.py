@@ -74,6 +74,36 @@ for m in sorted({k[0] for k in ck}):
     out.append(f"| {m} | {band(g(0), '{:.2f}')} | {band(g(64), '{:.2f}')} | {band(g(16), '{:.2f}')} | **{band(g(4), '{:.2f}')}** | {all(x <= 2.0 for x in g(4)) if g(4) else 'n/a'} |")
     report["cpu_chunked"][m] = {b: g(b) for b in (0, 64, 16, 4)}
 
+# 4. Qwen3-14B
+out += ["\n## 4. Qwen3-14B\n",
+        "GPU: int8 weight-only (own loader; the fp16 model needs ~29.5 GB and the shared card had ~25 GB free), compared only within the int8 model. CPU: fp32, one run.\n",
+        "| backend | check | result | outputs identical |", "|---|---|---|---|"]
+report["qwen14b"] = {}
+def rows14(prefix):
+    return [d for d in sorted(glob.glob(R + prefix)) if os.path.isdir(d)]
+import os
+for label, dirs in (("GPU int8", rows14("gpu-*qwen14b-int8")), ("CPU fp32", rows14("cpu-qwen14b"))):
+    cs = defaultdict(list); idn = []; pf = []; ck = defaultdict(list)
+    for d in dirs:
+        j = load(d + "/context_sweep.json")
+        if j:
+            for r in j["rows"]: cs[r["context_tokens"]].append(r["relative_throughput"]); idn.append(r["output_identical"])
+        j = load(d + "/prefix_sharing.json")
+        if j:
+            for r in j["rows"]:
+                if r["concurrency"] == 4: pf.append((r["block_ratio"], r["prefill_ratio"], r["output_identical"], r["blocks_leaked_on"]))
+        j = load(d + "/chunked_prefill.json")
+        if j:
+            for r in j["rows"]:
+                if not r.get("fused"): ck[r["budget"]].append(r["stall_ratio"])
+    for c, v in sorted(cs.items()):
+        out.append(f"| {label} | paged / contiguous @ {c} tokens | {band(v)} | {all(idn)} |")
+    if pf:
+        out.append(f"| {label} | prefix sharing N=4 (block ratio / prefill ratio / leaked) | {st.median(x[0] for x in pf):.3f} / {st.median(x[1] for x in pf):.2f} / {max(x[3] for x in pf)} | {all(x[2] for x in pf)} |")
+    for b in (0, 4):
+        if ck.get(b): out.append(f"| {label} | chunked-prefill stall, budget {b} (target <= 2.0) | {band(ck[b], '{:.2f}')} | n/a |")
+    report["qwen14b"][label] = {"context": dict(cs), "chunked": {b: ck.get(b) for b in (0, 4)}}
+
 open("docs/RESULTS_REPORT.md", "w").write("\n".join(out) + "\n")
 json.dump(report, open(R + "REPORT.json", "w"), indent=1)
 print("\n".join(out))

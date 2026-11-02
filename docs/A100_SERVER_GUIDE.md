@@ -62,7 +62,7 @@ needed; everything here is ungated.
 | Qwen2.5-7B-Instruct | 7B | 128 | 4 | **152064** | target |
 | Qwen3-0.6B / 1.7B / 4B | | 128 | 8 | 151936 | drafts |
 | Qwen3-8B | 8B | 128 | 8 | 151936 | target |
-| Qwen3-14B | 14B | 128 | 8 | 151936 | downloaded, **not run** (needs explicit sign-off; ~28 GB fp16 on a shared card) |
+| Qwen3-14B | 14B | 128 | 8 | 151936 | run via int8 weights on GPU (fp16 needs ~29.5 GB; ~25 GB was free) and fp32 on CPU |
 
 fp16 weights: 7B ≈ 15 GB, 8B ≈ 16 GB. Both fit on the 40 GB card together with the
 KV pool as long as the other tenants stay under ~20 GB.
@@ -124,7 +124,10 @@ failures are in **[KNOWN_FAILURES_AND_FIXES.md](KNOWN_FAILURES_AND_FIXES.md)**.
 Full tables with n and ranges: [RESULTS_REPORT.md](RESULTS_REPORT.md).
 
 Models run: SmolLM2-135M/360M, Qwen2.5-0.5B/1.5B/3B/7B, Qwen3-8B (draft pairs:
-Qwen2.5-0.5B, Qwen3-0.6B/1.7B/4B). **Qwen3-14B downloaded but not run.**
+Qwen2.5-0.5B, Qwen3-0.6B/1.7B/4B) and **Qwen3-14B** (GPU int8: paged/contiguous 0.99, prefix sharing 0.333, identical output; CPU fp32).
+
+One-command setup: `scripts/setup_server.sh [--dry-run]`. Regression gate: `python scripts/check_targets.py`
+(`--update` accepts the current numbers as the new baseline). Open work: [TASKS.md](TASKS.md).
 
 ### How to reproduce a number
 
