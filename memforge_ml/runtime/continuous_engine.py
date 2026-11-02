@@ -150,7 +150,7 @@ class ContinuousBatchingEngine:
         lookahead_k: int = 0,
         fused_prefill: bool = False,
         draft_cuda_graph=False,  # False | True (per-sequence graphs) | "batched"
-        paged_cuda_graph: bool = False,
+        paged_cuda_graph=False,  # False | True | "auto" (on when CUDA + sdpa allow it)
     ):
         if not HAS_CPP_ENGINE:
             raise RuntimeError(
@@ -204,6 +204,21 @@ class ContinuousBatchingEngine:
         # Optional: the whole plain decode step (index translation, KV write,
         # gather, forward) as one replayed CUDA graph. See graphed_paged_decode.
         self._paged_graph = None
+        graphs_ok = self._cuda_graphs_possible(model)
+        if paged_cuda_graph == "auto":
+            paged_cuda_graph = graphs_ok
+        if draft_cuda_graph == "auto":
+            draft_cuda_graph = (
+                "batched" if graphs_ok and draft_model is not None and self._cuda_graphs_possible(draft_model) else False
+            )
+        if draft_cuda_graph is True:
+            import warnings
+            warnings.warn(
+                "draft_cuda_graph=True (one graph per sequence) is superseded by 'batched', which stays "
+                "flat as the batch grows (0.82-0.91x vs 0.43-0.78x at batch 1-8 on Qwen3-8B); "
+                "pass draft_cuda_graph='batched' or 'auto'.",
+                DeprecationWarning, stacklevel=2,
+            )
         if paged_cuda_graph:
             self._paged_graph = GraphedPagedDecoder(
                 model, self.pool, max_batch=max_num_seqs, max_model_len=max_model_len,
@@ -1144,6 +1159,13 @@ class ContinuousBatchingEngine:
             if ev is not None:
                 events.append(ev)
         return events
+
+    def _cuda_graphs_possible(self, model) -> bool:
+        """CUDA graphs need a CUDA device and the sdpa attention backend (see GraphedPagedDecoder)."""
+        return bool(
+            str(self.device).startswith("cuda") and torch.cuda.is_available()
+            and getattr(model.config, "_attn_implementation", None) == "sdpa"
+        )
 
     def _decode_graphed(self, rts: List[SequenceRuntime]) -> List[TokenEvent]:
         """Plain decode for `rts` as one graph replay (writes KV in-graph)."""

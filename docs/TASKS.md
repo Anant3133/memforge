@@ -24,8 +24,8 @@ Evidence for every ✅ is in `benchmarks/results/runs/` and summarised in
 | T2 | Finish 14B CPU chunked-prefill run and record it | ✅ |
 | T3 | Regression gate (`scripts/check_targets.py`, baseline `benchmarks/targets_baseline.json`) | ✅ 6 tests; 0 hard failures on current runs |
 | T4 | One-command setup script (`scripts/setup_server.sh`, has `--dry-run`) | ✅ syntax + dry run checked; not executed (network was down) |
-| T5 | Re-run all GPU tests after the 32-token bucket default; repeat 3x | ✅ 27 passed x3 |
-| T6 | Re-run the full CPU suite; repeat 3x | ✅ 417 passed, 20 skipped x3 |
+| T5 | Re-run all GPU tests after the 32-token bucket default; repeat 3x | ✅ 30 passed x3 (incl. auto-mode tests) |
+| T6 | Re-run the full CPU suite; repeat 3x | ✅ 421 passed, 22 skipped x3 |
 | T7 | Final results report + docs refresh, commit | ✅ |
 
 ## C. Backlog (not started, ordered by expected payoff)
@@ -34,15 +34,26 @@ Evidence for every ✅ is in `benchmarks/results/runs/` and summarised in
 |---|---|---|
 | B1 | Read KV from the pool inside attention instead of gathering a copy | closes the 2048-token paged gap on 7B/8B (0.92-0.93 -> >= 0.95) |
 | B2 | Make speculation win: larger target, tuned draft, rerun on a quiet card | batch-1 1.03x was seen on a quiet card; nothing wins on a contended one |
-| B3 | Make the graphed paths default on GPU with a safe eager fallback | users get the speedup without flags |
+| B3 | ✅ `paged_cuda_graph="auto"` / `draft_cuda_graph="auto"`: on only when CUDA + sdpa allow it, otherwise off (CPU engines unaffected); 3 tests. Server default left off on purpose | users get the speedup with one flag |
 | B4 | Chunked prefill on GPU: floor is ~2.15x (target 2.0x) | per-step fixed cost; try graphing the chunk step |
 | B5 | Fused prefill makes GPU slower: fix or remove | currently off by default |
 | B6 | Speculation with sampling: unrolled draft is greedy-only | sampled output only has the statistical check |
-| B7 | Retire one of the two graphed-draft pools | per-sequence pool is superseded by the batched one |
+| B7 | ✅ per-sequence pool deprecated (`DeprecationWarning` pointing to `"batched"`); kept for compatibility, test covers the warning | superseded by the batched pool |
 | B8 | Push to GitHub | needs a fresh access token from the owner |
 | B9 | Confirm whose GPU miner was seen earlier in this container | owner question; it is no longer running |
 | B10 | Run 14B in fp16 (not int8) | needs ~30 GB free; the other tenants hold 15.6 GB |
 | B11 | Re-run pre-explainer speculative runs so the gate can classify them | older rows have no `output_equivalent` |
+
+## C2. Dashboard / frontend (this session)
+
+| # | Task | Status |
+|---|---|---|
+| U1 | Backend `GET /v1/results`: aggregates every archived run (median, min-max, n), cached by file mtime | ✅ `server/results_data.py`, 3 tests |
+| U2 | Run Analytics tab: KPIs, scoreboard, paged decode, speculative, chunked prefill, prefix sharing, Qwen3-14B, fp16 equivalence, soak, run inventory | ✅ |
+| U3 | Animations: count-up KPIs, bars grow, lines draw, donut sweep, staggered reveals, skeletons; all off under `prefers-reduced-motion` | ✅ |
+| U4 | "Know more" pop-up on every statistic (what / why / how measured / how to read / our result / caveats / files) | ✅ 24 on Analytics + 10 on Live; accessible modal (Esc, focus trap + restore, scroll lock, backdrop) |
+| U5 | Layout audit in a real headless browser at 360/414/768/1024/1440 on both tabs | ✅ 0 overflow, 0 console errors; bugs found and fixed: modal path overflow at 360px (9 of 24), unreadable scaled chart text, overlapping reference labels, misleading axis ticks, single-column KPI grid on phones |
+| U6 | Repeatable audits in `frontend/e2e/` | ✅ |
 
 ## D. Known limits (not bugs)
 

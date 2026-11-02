@@ -160,6 +160,9 @@
 .mf-files li { display: flex; align-items: center; gap: 6px; }
 
 @media (max-width: 640px) {
+  .mf-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .mf-kpi { padding: 12px; }
+  .mf-kpi-label { font-size: .66rem; }
   .mf-section { padding: 14px; }
   .mf-kpi-value { font-size: 1.55rem; }
   .mf-hero h2 { font-size: 1.25rem; }

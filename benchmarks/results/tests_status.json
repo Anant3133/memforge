@@ -1,7 +1,46 @@
 {
   "recorded": "2026-11-02",
-  "cpu_suite": {"passed": 417, "skipped": 20, "failed": 0, "consecutive_runs": 3},
-  "gpu_suite": {"passed": 27, "failed": 0, "consecutive_runs": 3, "files": ["test_graphed_paged_decode", "test_batched_graphed_draft", "test_graphed_draft", "test_vocab_padding", "test_int8_linear"]},
-  "mutation_checks": ["batched draft per-row write position", "paged graph causal mask", "graphed draft token sources", "vocab padding"],
-  "regression_gate": {"hard_failures": 0, "regressions": 0}
+  "cpu_suite": {
+    "passed": 421,
+    "skipped": 22,
+    "failed": 0,
+    "consecutive_runs": 3
+  },
+  "gpu_suite": {
+    "passed": 30,
+    "failed": 0,
+    "consecutive_runs": 3,
+    "files": [
+      "test_graphed_paged_decode",
+      "test_batched_graphed_draft",
+      "test_graphed_draft",
+      "test_vocab_padding",
+      "test_int8_linear",
+      "test_graph_auto"
+    ]
+  },
+  "mutation_checks": [
+    "batched draft per-row write position",
+    "paged graph causal mask",
+    "graphed draft token sources",
+    "vocab padding"
+  ],
+  "regression_gate": {
+    "hard_failures": 0,
+    "regressions": 0
+  },
+  "ui_audits": {
+    "layout_widths": [
+      360,
+      414,
+      768,
+      1024,
+      1440
+    ],
+    "views": 2,
+    "overflow_problems": 0,
+    "console_errors": 0,
+    "know_more_modals_checked": 34,
+    "modal_problems": 0
+  }
 }
