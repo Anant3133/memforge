@@ -32,6 +32,7 @@ from memforge_ml.kernels import attention_backend
 from memforge_ml.kernels.batched_decode import BatchedDecodeBuffers, assemble_batch
 from memforge_ml.runtime.batched_speculative import (
     DraftState,
+    GraphedDraftPool,
     propose_draft_tokens,
     resolve_round,
     scatter_accepted_kv,
@@ -145,6 +146,7 @@ class ContinuousBatchingEngine:
         draft_model=None,
         lookahead_k: int = 0,
         fused_prefill: bool = False,
+        draft_cuda_graph: bool = False,
     ):
         if not HAS_CPP_ENGINE:
             raise RuntimeError(
@@ -211,6 +213,15 @@ class ContinuousBatchingEngine:
         # is just decoding with extra bookkeeping.
         self.draft_model = draft_model
         self.lookahead_k = max(0, int(lookahead_k)) if draft_model is not None else 0
+        # Optional: replay the draft's decode step as a CUDA graph. Opt-in
+        # because it needs a CUDA device and ~max_model_len of static draft KV
+        # per concurrent sequence.
+        self._draft_pool = None
+        if draft_cuda_graph and draft_model is not None and self.lookahead_k > 0:
+            self._draft_pool = GraphedDraftPool(
+                draft_model, max_len=self.max_model_len,
+                num_slots=max_num_seqs, device=self.device,
+            )
         # K draft tokens plus the bonus token all have to have somewhere to be
         # written before verification can reject any of them, so the scheduler
         # reserves K+1 slots per running sequence per step rather than 1.
@@ -1177,7 +1188,9 @@ class ContinuousBatchingEngine:
         token_counts: List[int] = []
         for rt in candidates_rts:
             if rt.draft is None:
-                rt.draft = DraftState()
+                rt.draft = (
+                    self._draft_pool.acquire() if self._draft_pool is not None else DraftState()
+                )
             token_counts.append(len(rt.tokens))
             cand, probs = propose_draft_tokens(
                 self.draft_model, rt.draft, rt.tokens, k,
@@ -1297,6 +1310,9 @@ class ContinuousBatchingEngine:
         rt.finish_reason = reason
         rt.finished_at = time.perf_counter()
         self._release_view_capacity(rt)
+        if self._draft_pool is not None and rt.draft is not None:
+            self._draft_pool.release(rt.draft)
+            rt.draft = None
         rt.cache = None  # the scheduler frees the physical blocks on its next step
 
     # ----------------------------------------------------------------- output

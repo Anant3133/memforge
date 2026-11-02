@@ -63,3 +63,8 @@ hf_cache/
 
 # Intermediate HTML from scripts/build_runbook_pdf.py; the PDF is the artefact.
 docs/_runbook.build.html
+
+# A100 server artefacts
+.hf_cache/
+.hf_download*.log
+.ipynb_checkpoints/

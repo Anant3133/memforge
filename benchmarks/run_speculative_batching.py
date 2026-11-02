@@ -84,6 +84,9 @@ PROMPT_POOL = [
 ]
 
 
+DRAFT_CUDA_GRAPH = False
+
+
 def banner(text: str) -> None:
     print(f"\n{'=' * 78}\n{text}\n{'=' * 78}")
 
@@ -108,6 +111,7 @@ def run_scenario(
         max_model_len=1024,
         draft_model=draft_model,
         lookahead_k=lookahead if draft_model is not None else 0,
+        draft_cuda_graph=DRAFT_CUDA_GRAPH,
     )
     # `stop_on_eos=False` so every sequence decodes the same fixed length.
     # With stopping on, this model ends most of these prompts after one or two
@@ -162,6 +166,8 @@ def main() -> int:
     )
     parser.add_argument("--batch-sizes", type=int, nargs="+", default=[1, 2, 4, 8])
     parser.add_argument("--lookahead", type=int, default=4)
+    parser.add_argument("--draft-cuda-graph", action="store_true",
+                        help="replay the draft decode step as a CUDA graph (GPU only)")
     parser.add_argument(
         "--warmup", type=int, default=1,
         help="unmeasured interleaved iterations of BOTH arms before timing, "
@@ -182,6 +188,8 @@ def main() -> int:
     parser.add_argument("--block-size", type=int, default=16)
     parser.add_argument("--kv-budget-mb", type=float, default=512.0)
     args = parser.parse_args()
+    global DRAFT_CUDA_GRAPH
+    DRAFT_CUDA_GRAPH = args.draft_cuda_graph
     # Resolved here, before any banner or model load, so everything
     # below can rely on it. An explicit --device cuda fails here
     # rather than silently producing CPU numbers labelled cuda.
