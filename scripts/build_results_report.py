@@ -19,6 +19,7 @@ for d in sorted(glob.glob(R + "exp-bgraph-r*") + glob.glob(R + "exp-ugraph-r*"))
     j = load(d + "/speculative.json")
     if not (m and j): continue
     _, pair, arm = m.groups()
+    pair = pair.replace('-k3', '')
     for r in j["rows"]:
         k = (pair, r["batch_size"], arm)
         spec[k].append(r["speedup"]); eq[k].append(r.get("output_equivalent", r["output_identical"]))
@@ -38,13 +39,13 @@ for pair in sorted({k[0] for k in spec}):
 
 # 2. phase A graphed
 ga = defaultdict(lambda: defaultdict(list))
-for d in sorted(glob.glob(R + "phaseA-graphed-r*")):
-    m = re.match(r".*/phaseA-graphed-r(\d+)-(.+)$", d); j = load(d + "/context_sweep.json")
+for d in sorted(glob.glob(R + "phaseA-graphed-r*") + glob.glob(R + "phaseA-b32-r*")):
+    m = re.match(r".*/phaseA-(?:graphed|b32)-r(\d+)-(.+)$", d); bucket = 32 if "-b32-" in d else 128; j = load(d + "/context_sweep.json")
     if not (m and j): continue
     for r in j["rows"]:
         g = r.get("graphed")
         if not g: continue
-        k = (m.group(2), r["context_tokens"])
+        k = (m.group(2) + f" (gather bucket {bucket})", r["context_tokens"])
         ga[k]["eager"].append(r["relative_throughput"])
         ga[k]["pg_vs_ce"].append(g["paged_graphed_vs_contiguous_eager"])
         ga[k]["pg_vs_cg"].append(g["paged_graphed_vs_contiguous_graphed"])

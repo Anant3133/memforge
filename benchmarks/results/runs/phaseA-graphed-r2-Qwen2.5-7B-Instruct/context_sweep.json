@@ -1,0 +1,282 @@
+{
+  "benchmark": "context_sweep",
+  "phase": "A",
+  "generated_at": "2026-11-02T15:59:55",
+  "platform": {
+    "platform": "Linux-5.15.0-1053-nvidia-x86_64-with-glibc2.39",
+    "system": "Linux",
+    "python": "3.12.3",
+    "torch": "2.8.0+cu126",
+    "torch_cuda": "12.6",
+    "cuda_available": true,
+    "device": "cuda:0",
+    "dtype": "torch.float16",
+    "device_name": "NVIDIA A100-SXM4-40GB",
+    "compute_capability": "8.0",
+    "vram_total_mb": 40440.38,
+    "vram_free_mb": 7482.81
+  },
+  "peak_memory_mb": 16188.14,
+  "vram_spill": {
+    "checked": true,
+    "spilled": false,
+    "peak_mb": 16188.14,
+    "vram_total_mb": 40440.38,
+    "threshold_mb": 38418.36
+  },
+  "config": {
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "contexts": [
+      128,
+      512,
+      1024,
+      2048
+    ],
+    "steps": 32,
+    "repeats": 7,
+    "warmup": 2,
+    "block_size": 16,
+    "concurrency": null
+  },
+  "model_geometry": {
+    "num_layers": 28,
+    "num_kv_heads": 4,
+    "head_dim": 128,
+    "bytes_per_token": 57344
+  },
+  "all_outputs_identical": true,
+  "rows": [
+    {
+      "context_tokens": 128,
+      "contiguous_tok_per_s": 25.481,
+      "paged_tok_per_s": 21.789,
+      "relative_throughput": 0.8565,
+      "relative_throughput_min": 0.8466,
+      "relative_throughput_max": 0.8719,
+      "within_5_percent": false,
+      "verdict_decided": true,
+      "contiguous_prefill_s": 0.0244,
+      "paged_prefill_s": 0.0289,
+      "output_identical": true,
+      "contiguous_samples": [
+        26.061,
+        25.232,
+        25.496,
+        25.314,
+        25.481,
+        25.55,
+        25.44
+      ],
+      "paged_samples": [
+        21.658,
+        22.048,
+        21.933,
+        22.071,
+        21.571,
+        21.689,
+        21.789
+      ],
+      "graphed": {
+        "contiguous_graphed_tok_per_s": 28.656,
+        "paged_graphed_tok_per_s": 26.743,
+        "paged_graphed_vs_contiguous_graphed": 0.9332,
+        "paged_graphed_vs_contiguous_eager": 1.0495,
+        "paged_graphed_vs_paged_eager": 1.2273,
+        "paged_graphed_output_matches_contiguous": true,
+        "contiguous_graphed_output_matches_contiguous": true,
+        "paged_graphed_samples": [
+          27.018,
+          26.549,
+          26.743,
+          27.541,
+          26.196,
+          27.296,
+          25.242
+        ],
+        "contiguous_graphed_samples": [
+          29.786,
+          28.658,
+          28.661,
+          28.649,
+          28.637,
+          28.656,
+          28.636
+        ]
+      }
+    },
+    {
+      "context_tokens": 512,
+      "contiguous_tok_per_s": 23.885,
+      "paged_tok_per_s": 21.223,
+      "relative_throughput": 0.8886,
+      "relative_throughput_min": 0.8708,
+      "relative_throughput_max": 0.8963,
+      "within_5_percent": false,
+      "verdict_decided": true,
+      "contiguous_prefill_s": 0.0243,
+      "paged_prefill_s": 0.0291,
+      "output_identical": true,
+      "contiguous_samples": [
+        23.773,
+        23.885,
+        23.477,
+        24.071,
+        24.164,
+        24.274,
+        23.725
+      ],
+      "paged_samples": [
+        21.195,
+        21.223,
+        21.244,
+        21.31,
+        21.042,
+        20.936,
+        21.264
+      ],
+      "graphed": {
+        "contiguous_graphed_tok_per_s": 26.784,
+        "paged_graphed_tok_per_s": 25.148,
+        "paged_graphed_vs_contiguous_graphed": 0.9389,
+        "paged_graphed_vs_contiguous_eager": 1.0529,
+        "paged_graphed_vs_paged_eager": 1.185,
+        "paged_graphed_output_matches_contiguous": true,
+        "contiguous_graphed_output_matches_contiguous": true,
+        "paged_graphed_samples": [
+          25.89,
+          25.148,
+          23.662,
+          23.943,
+          24.675,
+          25.509,
+          25.612
+        ],
+        "contiguous_graphed_samples": [
+          26.784,
+          26.796,
+          26.778,
+          26.772,
+          26.819,
+          27.063,
+          26.782
+        ]
+      }
+    },
+    {
+      "context_tokens": 1024,
+      "contiguous_tok_per_s": 21.97,
+      "paged_tok_per_s": 20.206,
+      "relative_throughput": 0.9199,
+      "relative_throughput_min": 0.906,
+      "relative_throughput_max": 0.9234,
+      "within_5_percent": false,
+      "verdict_decided": true,
+      "contiguous_prefill_s": 0.0311,
+      "paged_prefill_s": 0.0431,
+      "output_identical": true,
+      "contiguous_samples": [
+        21.97,
+        22.09,
+        21.834,
+        22.301,
+        21.885,
+        22.021,
+        21.895
+      ],
+      "paged_samples": [
+        19.889,
+        20.321,
+        20.319,
+        20.206,
+        20.209,
+        20.165,
+        20.194
+      ],
+      "graphed": {
+        "contiguous_graphed_tok_per_s": 23.242,
+        "paged_graphed_tok_per_s": 22.111,
+        "paged_graphed_vs_contiguous_graphed": 0.9513,
+        "paged_graphed_vs_contiguous_eager": 1.0064,
+        "paged_graphed_vs_paged_eager": 1.0943,
+        "paged_graphed_output_matches_contiguous": true,
+        "contiguous_graphed_output_matches_contiguous": true,
+        "paged_graphed_samples": [
+          22.111,
+          22.498,
+          21.589,
+          22.471,
+          21.696,
+          22.382,
+          21.752
+        ],
+        "contiguous_graphed_samples": [
+          23.242,
+          23.216,
+          23.304,
+          23.203,
+          23.305,
+          23.213,
+          23.315
+        ]
+      }
+    },
+    {
+      "context_tokens": 2048,
+      "contiguous_tok_per_s": 20.024,
+      "paged_tok_per_s": 18.647,
+      "relative_throughput": 0.923,
+      "relative_throughput_min": 0.913,
+      "relative_throughput_max": 0.933,
+      "within_5_percent": false,
+      "verdict_decided": true,
+      "contiguous_prefill_s": 0.0631,
+      "paged_prefill_s": 0.0892,
+      "output_identical": true,
+      "contiguous_samples": [
+        20.139,
+        19.828,
+        20.202,
+        19.966,
+        19.903,
+        20.251,
+        20.024
+      ],
+      "paged_samples": [
+        18.647,
+        18.102,
+        18.6,
+        18.724,
+        18.085,
+        18.692,
+        18.682
+      ],
+      "graphed": {
+        "contiguous_graphed_tok_per_s": 19.296,
+        "paged_graphed_tok_per_s": 18.554,
+        "paged_graphed_vs_contiguous_graphed": 0.9615,
+        "paged_graphed_vs_contiguous_eager": 0.9266,
+        "paged_graphed_vs_paged_eager": 0.995,
+        "paged_graphed_output_matches_contiguous": true,
+        "contiguous_graphed_output_matches_contiguous": true,
+        "paged_graphed_samples": [
+          18.471,
+          18.656,
+          17.729,
+          18.554,
+          18.675,
+          17.759,
+          18.596
+        ],
+        "contiguous_graphed_samples": [
+          19.296,
+          19.493,
+          19.274,
+          19.316,
+          19.247,
+          19.235,
+          19.328
+        ]
+      }
+    }
+  ]
+}

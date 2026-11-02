@@ -112,13 +112,16 @@ failures are in **[KNOWN_FAILURES_AND_FIXES.md](KNOWN_FAILURES_AND_FIXES.md)**.
 | Correctness (paged = contiguous output) | **identical** on all 7 models, every run |
 | Prefix sharing (N=4) | **0.333×** blocks, **0.27×** prefill work, 0 leaks, all models |
 | Soak, 110 req @ concurrency 8 | **pass** on 0.5B, 1.5B, 3B, 7B, Qwen3-8B; 0 leaked blocks; RSS +4–25 MB |
-| Paged vs contiguous speed | 0.85× (small) to 0.94× (7B @ 2048). **5 % target not met** on GPU |
+| Paged vs contiguous speed | eager: 0.85× to 0.94×. **CUDA-graphed paged: 0.92-1.67× vs stock** (target met except 2048 tokens on 7B/8B, 0.93/0.92) |
 | Chunked prefill, GPU | worst stall 3.0× → 2.2× (floor ~2.15×). Target 2.0× **not met** |
-| Chunked prefill, CPU | 1.7-1.8× at budget 4. Target **met** (single runs) |
+| Chunked prefill, CPU (4 runs) | budget 4 median 1.81-2.10×; under 2.0 on the median for 4 of 5 models, not in every run |
 | Prefill/decode fusion, GPU | **worse** than unfused. Leave off |
 | Speculative decoding, eager draft | 0.3-0.7× everywhere. **Net loss** |
-| Speculative decoding, CUDA-graph draft | batch 1: **1.03×** (Qwen3-8B ← 0.6B), break-even-to-small-win; batch 2-4 still < 1 |
-| Tests | 400 pass, 2 GPU-only skipped on CPU; GPU tests pass on the A100 |
+| Speculative decoding, batched CUDA-graph draft | flat 0.82-0.91× across batch 1-8 (eager 0.70→0.35); no win on a contended card; 1.03× at batch 1 seen on a quiet card |
+| fp16 'not lossless' | all 18 of 60 mismatches are exact logit ties (explained automatically) |
+| Tests | CPU: 406 pass, 20 GPU-only skipped; GPU tests (graphs, batched draft, paged graph) pass on the A100 |
+
+Full tables with n and ranges: [RESULTS_REPORT.md](RESULTS_REPORT.md).
 
 Models run: SmolLM2-135M/360M, Qwen2.5-0.5B/1.5B/3B/7B, Qwen3-8B (draft pairs:
 Qwen2.5-0.5B, Qwen3-0.6B/1.7B/4B). **Qwen3-14B downloaded but not run.**

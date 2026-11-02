@@ -74,7 +74,7 @@ def _make_layer_class():
 class GraphedPagedDecoder:
     """Decode one token for each of B sequences against the paged pool, as a graph."""
 
-    def __init__(self, model, pool, max_batch: int, max_model_len: int, ctx_bucket: int = 128):
+    def __init__(self, model, pool, max_batch: int, max_model_len: int, ctx_bucket: int = 32):
         from transformers.cache_utils import Cache
 
         impl = getattr(model.config, "_attn_implementation", None)

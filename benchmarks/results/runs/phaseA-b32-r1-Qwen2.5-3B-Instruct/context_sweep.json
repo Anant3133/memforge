@@ -1,0 +1,164 @@
+{
+  "benchmark": "context_sweep",
+  "phase": "A",
+  "generated_at": "2026-11-02T17:01:14",
+  "platform": {
+    "platform": "Linux-5.15.0-1053-nvidia-x86_64-with-glibc2.39",
+    "system": "Linux",
+    "python": "3.12.3",
+    "torch": "2.8.0+cu126",
+    "torch_cuda": "12.6",
+    "cuda_available": true,
+    "device": "cuda:0",
+    "dtype": "torch.float16",
+    "device_name": "NVIDIA A100-SXM4-40GB",
+    "compute_capability": "8.0",
+    "vram_total_mb": 40440.38,
+    "vram_free_mb": 16410.81
+  },
+  "peak_memory_mb": 7193.36,
+  "vram_spill": {
+    "checked": true,
+    "spilled": false,
+    "peak_mb": 7193.36,
+    "vram_total_mb": 40440.38,
+    "threshold_mb": 38418.36
+  },
+  "config": {
+    "model": "Qwen/Qwen2.5-3B-Instruct",
+    "contexts": [
+      1024,
+      2048
+    ],
+    "steps": 32,
+    "repeats": 7,
+    "warmup": 2,
+    "block_size": 16,
+    "concurrency": null
+  },
+  "model_geometry": {
+    "num_layers": 36,
+    "num_kv_heads": 2,
+    "head_dim": 128,
+    "bytes_per_token": 36864
+  },
+  "all_outputs_identical": true,
+  "rows": [
+    {
+      "context_tokens": 1024,
+      "contiguous_tok_per_s": 28.165,
+      "paged_tok_per_s": 22.881,
+      "relative_throughput": 0.8218,
+      "relative_throughput_min": 0.7826,
+      "relative_throughput_max": 0.8267,
+      "within_5_percent": false,
+      "verdict_decided": true,
+      "contiguous_prefill_s": 0.0354,
+      "paged_prefill_s": 0.0428,
+      "output_identical": true,
+      "contiguous_samples": [
+        27.778,
+        28.165,
+        29.426,
+        27.991,
+        28.232,
+        28.106,
+        29.224
+      ],
+      "paged_samples": [
+        22.841,
+        22.881,
+        22.513,
+        23.141,
+        23.202,
+        23.8,
+        22.871
+      ],
+      "graphed": {
+        "contiguous_graphed_tok_per_s": 35.502,
+        "paged_graphed_tok_per_s": 29.241,
+        "paged_graphed_vs_contiguous_graphed": 0.8236,
+        "paged_graphed_vs_contiguous_eager": 1.0382,
+        "paged_graphed_vs_paged_eager": 1.2779,
+        "paged_graphed_output_matches_contiguous": true,
+        "contiguous_graphed_output_matches_contiguous": true,
+        "paged_graphed_samples": [
+          29.241,
+          30.999,
+          34.209,
+          28.845,
+          28.715,
+          28.825,
+          32.347
+        ],
+        "contiguous_graphed_samples": [
+          35.459,
+          35.218,
+          35.225,
+          35.711,
+          35.502,
+          35.513,
+          36.523
+        ]
+      }
+    },
+    {
+      "context_tokens": 2048,
+      "contiguous_tok_per_s": 26.445,
+      "paged_tok_per_s": 22.071,
+      "relative_throughput": 0.8334,
+      "relative_throughput_min": 0.8306,
+      "relative_throughput_max": 0.8381,
+      "within_5_percent": false,
+      "verdict_decided": true,
+      "contiguous_prefill_s": 0.0581,
+      "paged_prefill_s": 0.0755,
+      "output_identical": true,
+      "contiguous_samples": [
+        26.339,
+        26.526,
+        26.485,
+        26.445,
+        26.504,
+        26.433,
+        26.433
+      ],
+      "paged_samples": [
+        21.877,
+        22.024,
+        22.071,
+        22.162,
+        22.068,
+        22.184,
+        22.132
+      ],
+      "graphed": {
+        "contiguous_graphed_tok_per_s": 26.771,
+        "paged_graphed_tok_per_s": 25.462,
+        "paged_graphed_vs_contiguous_graphed": 0.9511,
+        "paged_graphed_vs_contiguous_eager": 0.9628,
+        "paged_graphed_vs_paged_eager": 1.1536,
+        "paged_graphed_output_matches_contiguous": true,
+        "contiguous_graphed_output_matches_contiguous": true,
+        "paged_graphed_samples": [
+          24.095,
+          24.945,
+          25.462,
+          24.888,
+          25.502,
+          25.566,
+          25.82
+        ],
+        "contiguous_graphed_samples": [
+          26.807,
+          26.763,
+          26.771,
+          26.782,
+          26.766,
+          26.763,
+          26.777
+        ]
+      }
+    }
+  ]
+}

@@ -8,3 +8,92 @@ decode steps: 32 per run, 7 interleaved repeats
 block size  : 16
 device      : cuda:0 torch.float16 (torch 2.8.0+cu126)
 Loading weights:   0%|                                                                                                                                        | 0/338 [00:00<?, ?it/s]Loading weights:   0%|▍                                                                                                                               | 1/338 [00:00<03:39,  1.53it/s]Loading weights:  33%|█████████████████████████████████████████                                                                                    | 111/338 [00:00<00:01, 183.10it/s]Loading weights:  46%|█████████████████████████████████████████████████████████▎                                                                   | 155/338 [00:01<00:00, 184.52it/s]Loading weights:  56%|█████████████████████████████████████████████████████████████████████▌                                                       | 188/338 [00:01<00:00, 173.51it/s]Loading weights:  63%|███████████████████████████████████████████████████████████████████████████████▏                                             | 214/338 [00:01<00:00, 175.23it/s]Loading weights:  70%|███████████████████████████████████████████████████████████████████████████████████████▋                                     | 237/338 [00:01<00:00, 183.91it/s]Loading weights:  77%|████████████████████████████████████████████████████████████████████████████████████████████████▏                            | 260/338 [00:01<00:00, 190.01it/s]Loading weights:  86%|███████████████████████████████████████████████████████████████████████████████████████████████████████████▌                 | 291/338 [00:01<00:00, 196.36it/s]Loading weights:  97%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▉    | 327/338 [00:01<00:00, 226.55it/s]Loading weights: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 338/338 [00:01<00:00, 180.18it/s]
+geometry    : 28 layers, 2 kv heads, head_dim 128, 28672 bytes/token
+
+==============================================================================
+context 128 tokens
+==============================================================================
+  repeat 1: contiguous  35.34 tok/s | paged  26.74 tok/s | contiguous-graphed  52.44 | paged-graphed  40.11
+  repeat 2: contiguous  36.33 tok/s | paged  26.92 tok/s | contiguous-graphed  52.64 | paged-graphed  42.93
+  repeat 3: contiguous  34.46 tok/s | paged  27.45 tok/s | contiguous-graphed  49.78 | paged-graphed  39.06
+  repeat 4: contiguous  35.29 tok/s | paged  28.07 tok/s | contiguous-graphed 130.33 | paged-graphed  47.32
+  repeat 5: contiguous  37.15 tok/s | paged  29.05 tok/s | contiguous-graphed  62.71 | paged-graphed  48.07
+  repeat 6: contiguous  37.23 tok/s | paged  29.01 tok/s | contiguous-graphed  62.74 | paged-graphed  48.06
+  repeat 7: contiguous  37.21 tok/s | paged  29.02 tok/s | contiguous-graphed  65.05 | paged-graphed  48.07
+
+  median contiguous : 36.33 tok/s
+  median paged      : 28.07 tok/s
+  relative          : 0.780x   (outside 5% of contiguous)
+  prefill median    : contiguous 0.024s | paged 0.028s
+  output identical  : YES
+  graphed: paged/contiguous = 0.754x (graphed both), paged-graphed/contiguous-eager = 1.302x, outputs match eager contiguous: paged True, contiguous True
+
+==============================================================================
+context 512 tokens
+==============================================================================
+  repeat 1: contiguous  36.21 tok/s | paged  28.46 tok/s | contiguous-graphed  58.18 | paged-graphed  45.57
+  repeat 2: contiguous  36.70 tok/s | paged  28.96 tok/s | contiguous-graphed  58.28 | paged-graphed  45.60
+  repeat 3: contiguous  36.23 tok/s | paged  29.40 tok/s | contiguous-graphed  58.94 | paged-graphed  45.15
+  repeat 4: contiguous  36.88 tok/s | paged  28.37 tok/s | contiguous-graphed  58.87 | paged-graphed  45.49
+  repeat 5: contiguous  36.85 tok/s | paged  28.25 tok/s | contiguous-graphed  60.31 | paged-graphed  45.46
+  repeat 6: contiguous  36.79 tok/s | paged  28.50 tok/s | contiguous-graphed  58.81 | paged-graphed  45.49
+  repeat 7: contiguous  36.81 tok/s | paged  28.48 tok/s | contiguous-graphed  58.55 | paged-graphed  45.63
+
+  median contiguous : 36.79 tok/s
+  median paged      : 28.48 tok/s
+  relative          : 0.775x   (outside 5% of contiguous)
+  prefill median    : contiguous 0.023s | paged 0.028s
+  output identical  : YES
+  graphed: paged/contiguous = 0.773x (graphed both), paged-graphed/contiguous-eager = 1.236x, outputs match eager contiguous: paged True, contiguous True
+
+==============================================================================
+context 1024 tokens
+==============================================================================
+  repeat 1: contiguous  35.54 tok/s | paged  28.09 tok/s | contiguous-graphed  54.75 | paged-graphed  40.83
+  repeat 2: contiguous  35.96 tok/s | paged  28.22 tok/s | contiguous-graphed  54.86 | paged-graphed  40.66
+  repeat 3: contiguous  36.40 tok/s | paged  28.38 tok/s | contiguous-graphed  55.66 | paged-graphed  40.85
+  repeat 4: contiguous  36.30 tok/s | paged  28.35 tok/s | contiguous-graphed  54.41 | paged-graphed  40.29
+  repeat 5: contiguous  36.07 tok/s | paged  28.66 tok/s | contiguous-graphed  54.33 | paged-graphed  40.75
+  repeat 6: contiguous  35.81 tok/s | paged  29.34 tok/s | contiguous-graphed  54.81 | paged-graphed  41.56
+  repeat 7: contiguous  35.96 tok/s | paged  28.17 tok/s | contiguous-graphed  54.84 | paged-graphed  40.78
+
+  median contiguous : 35.96 tok/s
+  median paged      : 28.35 tok/s
+  relative          : 0.785x   (outside 5% of contiguous)
+  prefill median    : contiguous 0.024s | paged 0.029s
+  output identical  : YES
+  graphed: paged/contiguous = 0.744x (graphed both), paged-graphed/contiguous-eager = 1.134x, outputs match eager contiguous: paged True, contiguous True
+
+==============================================================================
+context 2048 tokens
+==============================================================================
+  repeat 1: contiguous  33.69 tok/s | paged  26.89 tok/s | contiguous-graphed  44.49 | paged-graphed  34.47
+  repeat 2: contiguous  34.31 tok/s | paged  28.30 tok/s | contiguous-graphed  41.94 | paged-graphed  34.58
+  repeat 3: contiguous  34.22 tok/s | paged  27.05 tok/s | contiguous-graphed  44.61 | paged-graphed  34.42
+  repeat 4: contiguous  34.33 tok/s | paged  28.39 tok/s | contiguous-graphed  41.97 | paged-graphed  34.55
+  repeat 5: contiguous  34.25 tok/s | paged  26.72 tok/s | contiguous-graphed  50.36 | paged-graphed  34.43
+  repeat 6: contiguous  34.31 tok/s | paged  27.84 tok/s | contiguous-graphed  42.03 | paged-graphed  36.60
+  repeat 7: contiguous  34.33 tok/s | paged  27.02 tok/s | contiguous-graphed  41.92 | paged-graphed  34.56
+
+  median contiguous : 34.31 tok/s
+  median paged      : 27.05 tok/s
+  relative          : 0.798x   (outside 5% of contiguous)
+  prefill median    : contiguous 0.023s | paged 0.028s
+  output identical  : YES
+  graphed: paged/contiguous = 0.822x (graphed both), paged-graphed/contiguous-eager = 1.007x, outputs match eager contiguous: paged True, contiguous True
+
+==============================================================================
+Summary
+==============================================================================
+  context   contiguous      paged   relative           spread  within 5%  identical
+      128        36.33      28.07      0.780      0.756-0.795      False       True
+      512        36.79      28.48      0.775      0.769-0.789      False       True
+     1024        35.96      28.35      0.785      0.781-0.795      False       True
+     2048        34.31      27.05      0.798      0.787-0.825      False       True
+
+Worst case: 0.775x at 512 tokens.
+Phase A target (within 5% at 2048): NOT MET -- 20.2% slower than contiguous
+
+Paged output byte-identical to contiguous at every context length.
+
+Wrote benchmarks/results/context_sweep.json

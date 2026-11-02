@@ -237,7 +237,7 @@ class GraphedArms:
         self.pool = PagedKVPool(spec, num_blocks=blocks, block_size=block_size)
         self.blocks = blocks
         self.pdec = GraphedPagedDecoder(model, self.pool, max_batch=1,
-                                        max_model_len=total, ctx_bucket=int(__import__("os").environ.get("CTX_BUCKET", "128")))
+                                        max_model_len=total, ctx_bucket=int(__import__("os").environ.get("CTX_BUCKET", "32")))
 
     @torch.no_grad()
     def contiguous(self, prompt_ids, steps):
