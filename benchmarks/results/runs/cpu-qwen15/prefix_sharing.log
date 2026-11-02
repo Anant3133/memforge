@@ -1,0 +1,62 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+==========================================================================
+MemForge Phase B -- Prefix Sharing (Copy-on-Write)
+==========================================================================
+model            : Qwen/Qwen2.5-1.5B-Instruct
+shared prefix    : 256 tokens
+generated tokens : 12 per request
+pool             : 600 blocks x 16 tokens
+device           : cpu torch.float32 (torch 2.8.0+cu126)
+Loading weights:   0%|                                                                                                                                        | 0/338 [00:00<?, ?it/s]Loading weights:   0%|▍                                                                                                                               | 1/338 [00:00<02:37,  2.14it/s]Loading weights:  51%|███████████████████████████████████████████████████████████████▏                                                             | 171/338 [00:00<00:00, 388.20it/s]Loading weights:  77%|████████████████████████████████████████████████████████████████████████████████████████████████▏                            | 260/338 [00:00<00:00, 377.55it/s]Loading weights:  96%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▏    | 325/338 [00:00<00:00, 382.84it/s]Loading weights: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 338/338 [00:01<00:00, 332.37it/s]
+
+==========================================================================
+1 concurrent request(s), 263-token prompts
+==========================================================================
+                                   OFF          ON
+  peak blocks                       18          18
+  peak KV MB                     15.75       15.75
+  prefill tokens                   263         263
+  forward passes                    12          12
+  median TTFT ms               2431.18     2373.02
+  wall seconds                   8.855       8.785
+  shared blocks                      0           0
+  prefix hit rate                  0.0         0.0
+
+  block ratio ON/OFF   : 1.000
+  prefill ratio ON/OFF : 1.000
+  output byte-identical: YES
+  cow copies           : 0
+  blocks leaked        : OFF 0, ON 0
+
+==========================================================================
+4 concurrent request(s), 263-token prompts
+==========================================================================
+                                   OFF          ON
+  peak blocks                       72          24
+  peak KV MB                      63.0        21.0
+  prefill tokens                  1052         284
+  forward passes                    15          16
+  median TTFT ms                4097.6     2242.15
+  wall seconds                  10.342       6.611
+  shared blocks                      0          16
+  prefix hit rate                  0.0        0.96
+
+  block ratio ON/OFF   : 0.333
+  prefill ratio ON/OFF : 0.270
+  output byte-identical: YES
+  cow copies           : 0
+  blocks leaked        : OFF 0, ON 0
+
+==========================================================================
+Summary
+==========================================================================
+   N   blocks OFF   blocks ON    ratio  prefill ratio   identical
+   1           18          18    1.000          1.000        True
+   4           72          24    0.333          0.270        True
+
+Best memory reduction: 3.0x at N=4 (72 -> 24 blocks)
+
+Output byte-identical to the non-sharing engine at every concurrency level.
+
+Wrote benchmarks/results/prefix_sharing.json

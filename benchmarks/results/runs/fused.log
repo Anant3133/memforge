@@ -1,0 +1,19 @@
+=== benchmarks/results/runs/exp-fused-r1-Qwen2.5-1.5B-Instruct
+exit=0
+=== benchmarks/results/runs/exp-fused-r1-Qwen2.5-7B-Instruct
+exit=0
+=== benchmarks/results/runs/exp-fused-r1-Qwen3-8B
+exit=0
+=== benchmarks/results/runs/exp-fused-r2-Qwen2.5-1.5B-Instruct
+exit=0
+=== benchmarks/results/runs/exp-fused-r2-Qwen2.5-7B-Instruct
+exit=0
+=== benchmarks/results/runs/exp-fused-r2-Qwen3-8B
+exit=0
+=== benchmarks/results/runs/exp-fused-r3-Qwen2.5-1.5B-Instruct
+exit=0
+=== benchmarks/results/runs/exp-fused-r3-Qwen2.5-7B-Instruct
+exit=0
+=== benchmarks/results/runs/exp-fused-r3-Qwen3-8B
+exit=0
+FUSED_DONE

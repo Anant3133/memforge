@@ -1,0 +1,123 @@
+
+==============================================================================
+MemForge Phase C — does a long prompt stall in-flight decoding?
+==============================================================================
+model            : Qwen/Qwen3-8B
+intruding prompt : 512 tokens
+victim           : 32-token prompt, 16 tokens generated
+budgets          : [0, 64, 16, 4]  (0 = unlimited, the old behaviour)
+Loading weights:   0%|                                                                                                                                        | 0/399 [00:00<?, ?it/s]Loading weights:   0%|▎                                                                                                                               | 1/399 [00:00<05:27,  1.22it/s]Loading weights:   1%|▋                                                                                                                               | 2/399 [00:01<03:05,  2.14it/s]Loading weights:  12%|███████████████▎                                                                                                               | 48/399 [00:01<00:05, 64.73it/s]Loading weights:  15%|███████████████████▍                                                                                                           | 61/399 [00:01<00:05, 65.96it/s]Loading weights:  18%|██████████████████████▉                                                                                                        | 72/399 [00:01<00:04, 65.58it/s]Loading weights:  20%|█████████████████████████▊                                                                                                     | 81/399 [00:01<00:04, 66.21it/s]Loading weights:  23%|█████████████████████████████▎                                                                                                 | 92/399 [00:01<00:04, 64.33it/s]Loading weights:  26%|████████████████████████████████▌                                                                                             | 103/399 [00:02<00:05, 57.33it/s]Loading weights:  29%|████████████████████████████████████                                                                                          | 114/399 [00:02<00:04, 61.39it/s]Loading weights:  31%|██████████████████████████████████████▌                                                                                       | 122/399 [00:02<00:04, 62.69it/s]Loading weights:  33%|██████████████████████████████████████████                                                                                    | 133/399 [00:02<00:04, 64.64it/s]Loading weights:  35%|████████████████████████████████████████████▏                                                                                 | 140/399 [00:02<00:04, 59.82it/s]Loading weights:  37%|██████████████████████████████████████████████▍                                                                               | 147/399 [00:02<00:04, 56.20it/s]Loading weights:  40%|█████████████████████████████████████████████████▉                                                                            | 158/399 [00:03<00:04, 59.34it/s]Loading weights:  42%|█████████████████████████████████████████████████████▎                                                                        | 169/399 [00:03<00:03, 61.64it/s]Loading weights:  44%|███████████████████████████████████████████████████████▉                                                                      | 177/399 [00:03<00:03, 64.37it/s]Loading weights:  46%|██████████████████████████████████████████████████████████                                                                    | 184/399 [00:03<00:03, 62.95it/s]Loading weights:  48%|████████████████████████████████████████████████████████████▎                                                                 | 191/399 [00:03<00:03, 56.29it/s]Loading weights:  51%|███████████████████████████████████████████████████████████████▊                                                              | 202/399 [00:03<00:03, 51.61it/s]Loading weights:  53%|███████████████████████████████████████████████████████████████████▎                                                          | 213/399 [00:03<00:03, 57.86it/s]Loading weights:  56%|██████████████████████████████████████████████████████████████████████▋                                                       | 224/399 [00:04<00:02, 60.12it/s]Loading weights:  59%|██████████████████████████████████████████████████████████████████████████▏                                                   | 235/399 [00:04<00:02, 63.88it/s]Loading weights:  62%|█████████████████████████████████████████████████████████████████████████████▋                                                | 246/399 [00:04<00:02, 64.44it/s]Loading weights:  64%|████████████████████████████████████████████████████████████████████████████████▏                                             | 254/399 [00:04<00:02, 63.18it/s]Loading weights:  65%|██████████████████████████████████████████████████████████████████████████████████▍                                           | 261/399 [00:04<00:02, 61.22it/s]Loading weights:  67%|████████████████████████████████████████████████████████████████████████████████████▋                                         | 268/399 [00:04<00:02, 57.88it/s]Loading weights:  70%|████████████████████████████████████████████████████████████████████████████████████████                                      | 279/399 [00:05<00:02, 58.89it/s]Loading weights:  73%|███████████████████████████████████████████████████████████████████████████████████████████▌                                  | 290/399 [00:05<00:01, 55.62it/s]Loading weights:  75%|███████████████████████████████████████████████████████████████████████████████████████████████                               | 301/399 [00:05<00:01, 62.65it/s]Loading weights:  78%|██████████████████████████████████████████████████████████████████████████████████████████████████▌                           | 312/399 [00:05<00:01, 56.87it/s]Loading weights:  81%|██████████████████████████████████████████████████████████████████████████████████████████████████████                        | 323/399 [00:05<00:01, 59.20it/s]Loading weights:  84%|█████████████████████████████████████████████████████████████████████████████████████████████████████████▍                    | 334/399 [00:05<00:01, 61.44it/s]Loading weights:  86%|████████████████████████████████████████████████████████████████████████████████████████████████████████████▉                 | 345/399 [00:06<00:00, 61.96it/s]Loading weights:  89%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████▍             | 356/399 [00:06<00:00, 63.07it/s]Loading weights:  92%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████▉          | 367/399 [00:06<00:00, 64.31it/s]Loading weights:  95%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▎      | 378/399 [00:06<00:00, 63.37it/s]Loading weights:  97%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▊   | 389/399 [00:06<00:00, 64.03it/s]Loading weights: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [00:06<00:00, 58.59it/s]
+
+==============================================================================
+prefill budget: unlimited tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 42.711 ms
+  median gap after       : 43.247 ms
+  p99 gap                : 97.977 ms  (2.29x the victim's own median)
+  worst gap              : 98.481 ms  (2.31x)
+  prefill chunks         : 2
+  fused steps            : 0
+  forward passes         : 17
+  intruder TTFT          : 98.5 ms
+
+==============================================================================
+prefill budget: 64 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 42.899 ms
+  median gap after       : 89.851 ms
+  p99 gap                : 94.462 ms  (2.2x the victim's own median)
+  worst gap              : 95.041 ms  (2.22x)
+  prefill chunks         : 9
+  fused steps            : 0
+  forward passes         : 24
+  intruder TTFT          : 722.5 ms
+
+==============================================================================
+prefill budget: 64 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 42.591 ms
+  median gap after       : 93.344 ms
+  p99 gap                : 166.293 ms  (3.9x the victim's own median)
+  worst gap              : 178.043 ms  (4.18x)
+  prefill chunks         : 9
+  fused steps            : 8
+  forward passes         : 16
+  intruder TTFT          : 833.4 ms
+
+==============================================================================
+prefill budget: 16 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 42.462 ms
+  median gap after       : 89.534 ms
+  p99 gap                : 98.441 ms  (2.32x the victim's own median)
+  worst gap              : 99.451 ms  (2.34x)
+  prefill chunks         : 34
+  fused steps            : 0
+  forward passes         : 50
+  intruder TTFT          : 2022.1 ms
+
+==============================================================================
+prefill budget: 16 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 42.587 ms
+  median gap after       : 90.513 ms
+  p99 gap                : 94.649 ms  (2.22x the victim's own median)
+  worst gap              : 94.906 ms  (2.23x)
+  prefill chunks         : 34
+  fused steps            : 12
+  forward passes         : 38
+  intruder TTFT          : 2037.8 ms
+
+==============================================================================
+prefill budget: 4 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 42.471 ms
+  median gap after       : 89.461 ms
+  p99 gap                : 90.796 ms  (2.14x the victim's own median)
+  worst gap              : 90.841 ms  (2.14x)
+  prefill chunks         : 136
+  fused steps            : 0
+  forward passes         : 152
+  intruder TTFT          : 6574.6 ms
+
+==============================================================================
+prefill budget: 4 tokens/step + fused
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 42.325 ms
+  median gap after       : 89.937 ms
+  p99 gap                : 90.938 ms  (2.15x the victim's own median)
+  worst gap              : 90.939 ms  (2.15x)
+  prefill chunks         : 136
+  fused steps            : 12
+  forward passes         : 140
+  intruder TTFT          : 6592.9 ms
+
+==============================================================================
+Summary
+==============================================================================
+    budget  fused  median before       p99   p99 x     worst   worst x  chunks  passes
+ unlimited     no          42.71     97.98    2.29     98.48      2.31       2      17
+        64     no          42.90     94.46    2.20     95.04      2.22       9      24
+        64    yes          42.59    166.29    3.90    178.04      4.18       9      16
+        16     no          42.46     98.44    2.32     99.45      2.34      34      50
+        16    yes          42.59     94.65    2.22     94.91      2.23      34      38
+         4     no          42.47     90.80    2.14     90.84      2.14     136     152
+         4    yes          42.33     90.94    2.15     90.94      2.15     136     140
+
+Budget 64: fusing the 8 mixed steps took forward passes from 24 to 16, and the worst stall from 2.22x to 4.18x.
+
+Budget 16: fusing the 12 mixed steps took forward passes from 50 to 38, and the worst stall from 2.34x to 2.23x.
+
+Budget 4: fusing the 12 mixed steps took forward passes from 152 to 140, and the worst stall from 2.14x to 2.15x.
+
+Worst-case stall: 98.5 ms unlimited vs 90.8 ms at budget 4 (1.1x better)
+Phase C bullet 1 (chunked prefill): worst-case stall cut 1.1x, from 2.31x the victim's median to 2.14x at budget 4. Target NOT met, and the residual is understood. Without fusion the ratio asymptotes near 2.5x because a step carrying a chunk runs TWO forward passes, one for the chunk and one for the decode batch. Fusion (bullet 2) removes that second pass, and here it helped at 1/3 budgets and hurt at 2/3: budget 64 2.22x->4.18x, budget 16 2.34x->2.23x, budget 4 2.14x->2.15x. Removing a forward pass is not automatically a win: the fused pass still carries the chunk's tokens alongside the decode's one, and at larger model geometry that single wider pass can cost more than the two narrower ones it replaced.
+
+Wrote benchmarks/results/chunked_prefill.json

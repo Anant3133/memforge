@@ -1,0 +1,39 @@
+==========================================================================
+  MemForge sustained stress & memory-leak harness
+==========================================================================
+  spawning a server on port 8123 (model Qwen/Qwen2.5-7B-Instruct)…
+  waiting for http://127.0.0.1:8123 to become ready…
+  warm-up: 5 requests at concurrency 1…
+  sequential: 55 requests at concurrency 1…
+  concurrent: 55 requests at concurrency 8…
+
+==========================================================================
+  Stress & leak test summary
+==========================================================================
+  requests                           115 ok / 115 sent
+  status codes                       {'200': 115}
+  duration                           39.2 s
+
+  blocks leaked (must be 0)          0
+  blocks allocated start -> end      0 -> 0
+  peak blocks allocated              25
+  peak blocks shared                 2
+  peak requests in flight            8
+
+  RSS initial                        1012.2 MB
+  RSS plateau (post-warm-up)         1758.1 MB
+  RSS peak                           1783.4 MB
+  RSS final                          1783.4 MB
+  RSS growth vs plateau              25.3 MB
+
+  TTFT p50 / p95 / p99               30.92 / 255.08 / 272.64 ms
+  mean tokens/sec per request        22.67
+  total tokens generated             1840
+
+==========================================================================
+  PASS  no leaked blocks at any sample
+  PASS  all physical blocks returned to the pool
+  PASS  RSS flat after warm-up (+25.3 MB)
+==========================================================================
+
+  wrote benchmarks/results/stress_test.json

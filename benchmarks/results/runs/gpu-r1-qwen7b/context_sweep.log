@@ -1,0 +1,103 @@
+
+==============================================================================
+MemForge Phase A — paged vs contiguous across context lengths
+==============================================================================
+model       : Qwen/Qwen2.5-7B-Instruct
+contexts    : [128, 512, 1024, 2048]
+decode steps: 8 per run, 9 interleaved repeats
+block size  : 16
+device      : cuda:0 torch.float16 (torch 2.8.0+cu126)
+Loading weights:   0%|                                                                                                                                        | 0/339 [00:00<?, ?it/s]Loading weights:   0%|▍                                                                                                                               | 1/339 [00:00<05:03,  1.11it/s]Loading weights:   1%|▊                                                                                                                               | 2/339 [00:01<02:56,  1.91it/s]Loading weights:  16%|████████████████████▏                                                                                                          | 54/339 [00:01<00:03, 73.38it/s]Loading weights:  23%|█████████████████████████████▏                                                                                                 | 78/339 [00:01<00:03, 78.54it/s]Loading weights:  28%|███████████████████████████████████▉                                                                                           | 96/339 [00:01<00:02, 84.69it/s]Loading weights:  33%|█████████████████████████████████████████▎                                                                                    | 111/339 [00:01<00:02, 84.28it/s]Loading weights:  37%|██████████████████████████████████████████████                                                                                | 124/339 [00:02<00:03, 70.50it/s]Loading weights:  40%|██████████████████████████████████████████████████▌                                                                           | 136/339 [00:02<00:02, 76.36it/s]Loading weights:  44%|███████████████████████████████████████████████████████                                                                       | 148/339 [00:02<00:02, 75.95it/s]Loading weights:  47%|███████████████████████████████████████████████████████████▍                                                                  | 160/339 [00:02<00:02, 73.62it/s]Loading weights:  51%|███████████████████████████████████████████████████████████████▉                                                              | 172/339 [00:02<00:02, 76.78it/s]Loading weights:  54%|████████████████████████████████████████████████████████████████████▍                                                         | 184/339 [00:02<00:01, 83.51it/s]Loading weights:  58%|████████████████████████████████████████████████████████████████████████▊                                                     | 196/339 [00:03<00:01, 78.73it/s]Loading weights:  61%|█████████████████████████████████████████████████████████████████████████████▎                                                | 208/339 [00:03<00:01, 74.50it/s]Loading weights:  65%|█████████████████████████████████████████████████████████████████████████████████▊                                            | 220/339 [00:03<00:01, 71.86it/s]Loading weights:  68%|██████████████████████████████████████████████████████████████████████████████████████▏                                       | 232/339 [00:03<00:01, 77.96it/s]Loading weights:  72%|██████████████████████████████████████████████████████████████████████████████████████████▋                                   | 244/339 [00:03<00:01, 76.55it/s]Loading weights:  76%|███████████████████████████████████████████████████████████████████████████████████████████████▏                              | 256/339 [00:03<00:01, 73.61it/s]Loading weights:  79%|███████████████████████████████████████████████████████████████████████████████████████████████████▌                          | 268/339 [00:03<00:00, 79.92it/s]Loading weights:  83%|████████████████████████████████████████████████████████████████████████████████████████████████████████                      | 280/339 [00:04<00:00, 81.16it/s]Loading weights:  86%|████████████████████████████████████████████████████████████████████████████████████████████████████████████▌                 | 292/339 [00:04<00:00, 78.51it/s]Loading weights:  90%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████▉             | 304/339 [00:04<00:00, 72.46it/s]Loading weights:  93%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▍        | 316/339 [00:04<00:00, 71.62it/s]Loading weights:  97%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▉    | 328/339 [00:04<00:00, 74.18it/s]Loading weights: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 339/339 [00:04<00:00, 70.13it/s]
+geometry    : 28 layers, 4 kv heads, head_dim 128, 57344 bytes/token
+
+==============================================================================
+context 128 tokens
+==============================================================================
+  repeat 1: contiguous  23.24 tok/s | paged  20.52 tok/s
+  repeat 2: contiguous  23.10 tok/s | paged  20.58 tok/s
+  repeat 3: contiguous  23.29 tok/s | paged  20.57 tok/s
+  repeat 4: contiguous  23.35 tok/s | paged  20.57 tok/s
+  repeat 5: contiguous  23.12 tok/s | paged  20.54 tok/s
+  repeat 6: contiguous  23.12 tok/s | paged  20.56 tok/s
+  repeat 7: contiguous  23.29 tok/s | paged  20.63 tok/s
+  repeat 8: contiguous  23.14 tok/s | paged  20.52 tok/s
+  repeat 9: contiguous  23.16 tok/s | paged  20.51 tok/s
+
+  median contiguous : 23.16 tok/s
+  median paged      : 20.56 tok/s
+  relative          : 0.886x   (outside 5% of contiguous)
+  prefill median    : contiguous 0.024s | paged 0.029s
+  output identical  : YES
+
+==============================================================================
+context 512 tokens
+==============================================================================
+  repeat 1: contiguous  20.63 tok/s | paged  18.65 tok/s
+  repeat 2: contiguous  20.57 tok/s | paged  18.63 tok/s
+  repeat 3: contiguous  20.79 tok/s | paged  18.43 tok/s
+  repeat 4: contiguous  20.79 tok/s | paged  18.54 tok/s
+  repeat 5: contiguous  20.58 tok/s | paged  18.61 tok/s
+  repeat 6: contiguous  20.59 tok/s | paged  18.58 tok/s
+  repeat 7: contiguous  20.61 tok/s | paged  18.47 tok/s
+  repeat 8: contiguous  20.59 tok/s | paged  18.50 tok/s
+  repeat 9: contiguous  20.61 tok/s | paged  18.50 tok/s
+
+  median contiguous : 20.61 tok/s
+  median paged      : 18.54 tok/s
+  relative          : 0.898x   (outside 5% of contiguous)
+  prefill median    : contiguous 0.024s | paged 0.029s
+  output identical  : YES
+
+==============================================================================
+context 1024 tokens
+==============================================================================
+  repeat 1: contiguous  17.37 tok/s | paged  15.94 tok/s
+  repeat 2: contiguous  17.39 tok/s | paged  15.85 tok/s
+  repeat 3: contiguous  17.22 tok/s | paged  15.96 tok/s
+  repeat 4: contiguous  17.20 tok/s | paged  15.97 tok/s
+  repeat 5: contiguous  17.25 tok/s | paged  16.06 tok/s
+  repeat 6: contiguous  17.22 tok/s | paged  16.04 tok/s
+  repeat 7: contiguous  17.16 tok/s | paged  15.98 tok/s
+  repeat 8: contiguous  17.21 tok/s | paged  15.94 tok/s
+  repeat 9: contiguous  17.20 tok/s | paged  15.99 tok/s
+
+  median contiguous : 17.22 tok/s
+  median paged      : 15.97 tok/s
+  relative          : 0.929x   (outside 5% of contiguous)
+  prefill median    : contiguous 0.031s | paged 0.043s
+  output identical  : YES
+
+==============================================================================
+context 2048 tokens
+==============================================================================
+  repeat 1: contiguous  13.14 tok/s | paged  12.65 tok/s
+  repeat 2: contiguous  13.14 tok/s | paged  12.65 tok/s
+  repeat 3: contiguous  13.11 tok/s | paged  12.71 tok/s
+  repeat 4: contiguous  13.18 tok/s | paged  12.61 tok/s
+  repeat 5: contiguous  13.18 tok/s | paged  12.70 tok/s
+  repeat 6: contiguous  13.06 tok/s | paged  12.70 tok/s
+  repeat 7: contiguous  13.11 tok/s | paged  12.66 tok/s
+  repeat 8: contiguous  13.20 tok/s | paged  12.59 tok/s
+  repeat 9: contiguous  13.09 tok/s | paged  12.62 tok/s
+
+  median contiguous : 13.14 tok/s
+  median paged      : 12.65 tok/s
+  relative          : 0.963x   (within 5% of contiguous)
+  prefill median    : contiguous 0.063s | paged 0.088s
+  output identical  : YES
+
+==============================================================================
+Summary
+==============================================================================
+  context   contiguous      paged   relative           spread  within 5%  identical
+      128        23.16      20.56      0.886      0.883-0.889      False       True
+      512        20.61      18.54      0.898      0.892-0.904      False       True
+     1024        17.21      15.97      0.929      0.917-0.931      False       True
+     2048        13.14      12.65      0.963      0.956-0.969       True       True
+
+Worst case: 0.886x at 128 tokens.
+Phase A target (within 5% at 2048): MET
+
+Paged output byte-identical to contiguous at every context length.
+
+Wrote benchmarks/results/context_sweep.json

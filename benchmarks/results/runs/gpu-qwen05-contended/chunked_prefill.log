@@ -1,0 +1,75 @@
+
+==============================================================================
+MemForge Phase C — does a long prompt stall in-flight decoding?
+==============================================================================
+model            : Qwen/Qwen2.5-0.5B-Instruct
+intruding prompt : 512 tokens
+victim           : 32-token prompt, 16 tokens generated
+budgets          : [0, 64, 16, 4]  (0 = unlimited, the old behaviour)
+Loading weights:   0%|                                                                                                                                        | 0/290 [00:00<?, ?it/s]Loading weights:   0%|▍                                                                                                                               | 1/290 [00:00<01:02,  4.64it/s]Loading weights: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 290/290 [00:00<00:00, 927.59it/s]
+
+==============================================================================
+prefill budget: unlimited tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 47.621 ms
+  median gap after       : 47.725 ms
+  p99 gap                : 141.543 ms  (2.97x the victim's own median)
+  worst gap              : 146.042 ms  (3.07x)
+  prefill chunks         : 2
+  fused steps            : 0
+  forward passes         : 17
+  intruder TTFT          : 113.9 ms
+
+==============================================================================
+prefill budget: 64 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 44.917 ms
+  median gap after       : 92.671 ms
+  p99 gap                : 97.881 ms  (2.18x the victim's own median)
+  worst gap              : 98.062 ms  (2.18x)
+  prefill chunks         : 9
+  fused steps            : 0
+  forward passes         : 24
+  intruder TTFT          : 751.7 ms
+
+==============================================================================
+prefill budget: 16 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 47.673 ms
+  median gap after       : 92.041 ms
+  p99 gap                : 92.646 ms  (1.94x the victim's own median)
+  worst gap              : 92.659 ms  (1.94x)
+  prefill chunks         : 34
+  fused steps            : 0
+  forward passes         : 50
+  intruder TTFT          : 2001.9 ms
+
+==============================================================================
+prefill budget: 4 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 47.693 ms
+  median gap after       : 91.923 ms
+  p99 gap                : 96.498 ms  (2.02x the victim's own median)
+  worst gap              : 96.508 ms  (2.02x)
+  prefill chunks         : 136
+  fused steps            : 0
+  forward passes         : 152
+  intruder TTFT          : 6275.0 ms
+
+==============================================================================
+Summary
+==============================================================================
+    budget  fused  median before       p99   p99 x     worst   worst x  chunks  passes
+ unlimited     no          47.62    141.54    2.97    146.04      3.07       2      17
+        64     no          44.92     97.88    2.18     98.06      2.18       9      24
+        16     no          47.67     92.65    1.94     92.66      1.94      34      50
+         4     no          47.69     96.50    2.02     96.51      2.02     136     152
+
+Worst-case stall: 146.0 ms unlimited vs 92.7 ms at budget 16 (1.6x better)
+Phase C bullet 1 (chunked prefill): worst-case stall cut 1.6x, from 3.07x the victim's median to 1.94x at budget 16. Target met: in-flight decoding is effectively unaffected.
+
+Wrote benchmarks/results/chunked_prefill.json

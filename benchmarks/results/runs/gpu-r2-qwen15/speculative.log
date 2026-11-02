@@ -1,0 +1,77 @@
+
+==============================================================================
+Phase D - speculative decoding inside continuous batching
+==============================================================================
+target model : Qwen/Qwen2.5-1.5B-Instruct
+draft model  : Qwen/Qwen2.5-0.5B-Instruct
+lookahead K  : 4  (scheduler reserves K+1 = 5 slots per sequence per step)
+device       : cuda:0 torch.float16
+Loading weights:   0%|                                                                                                                                        | 0/338 [00:00<?, ?it/s]Loading weights:   0%|▍                                                                                                                               | 1/338 [00:00<01:41,  3.30it/s]Loading weights:  15%|███████████████████                                                                                                           | 51/338 [00:00<00:02, 129.68it/s]Loading weights:  20%|█████████████████████████▎                                                                                                    | 68/338 [00:00<00:02, 129.05it/s]Loading weights:  25%|██████████████████████████████▉                                                                                               | 83/338 [00:00<00:01, 131.71it/s]Loading weights:  29%|████████████████████████████████████▉                                                                                         | 99/338 [00:00<00:02, 115.17it/s]Loading weights:  47%|██████████████████████████████████████████████████████████▊                                                                  | 159/338 [00:01<00:00, 220.83it/s]Loading weights:  58%|████████████████████████████████████████████████████████████████████████                                                     | 195/338 [00:01<00:00, 247.13it/s]Loading weights:  68%|█████████████████████████████████████████████████████████████████████████████████████▍                                       | 231/338 [00:01<00:00, 263.29it/s]Loading weights:  79%|██████████████████████████████████████████████████████████████████████████████████████████████████▋                          | 267/338 [00:01<00:00, 276.11it/s]Loading weights:  90%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████             | 303/338 [00:01<00:00, 292.23it/s]Loading weights: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 338/338 [00:01<00:00, 215.95it/s]
+Loading weights:   0%|                                                                                                                                        | 0/290 [00:00<?, ?it/s]Loading weights:   0%|▍                                                                                                                               | 1/290 [00:00<03:14,  1.49it/s]Loading weights:  55%|████████████████████████████████████████████████████████████████████▌                                                        | 159/290 [00:00<00:00, 272.34it/s]Loading weights:  83%|████████████████████████████████████████████████████████████████████████████████████████████████████████▎                    | 242/290 [00:01<00:00, 278.28it/s]Loading weights: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 290/290 [00:01<00:00, 243.76it/s]
+
+==============================================================================
+batch = 1
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 16
+  speculative rounds                  : 6
+  verify passes (batched)             : 6
+  verify passes (per-sequence)        : 6
+  verify passes saved                 : 0
+  all target passes (incl. prefill)   : 9
+  sequences verified per round        : 1.0
+  draft acceptance rate               : 0.2917
+  tokens per target pass  spec / plain: 1.778 / 1.0
+  wall-clock speedup (median of 3)     : 0.502x  [0.501-0.532]
+  speedup series                      : [0.501, 0.502, 0.532]
+  spec tok/s series                   : [16.75, 16.76, 17.83]
+  plain tok/s series                  : [33.45, 33.4, 33.53]
+
+==============================================================================
+batch = 2
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 32
+  speculative rounds                  : 6
+  verify passes (batched)             : 6
+  verify passes (per-sequence)        : 9
+  verify passes saved                 : 3
+  all target passes (incl. prefill)   : 13
+  sequences verified per round        : 1.5
+  draft acceptance rate               : 0.4444
+  tokens per target pass  spec / plain: 2.462 / 1.882
+  wall-clock speedup (median of 3)     : 0.432x  [0.414-0.475]
+  speedup series                      : [0.475, 0.414, 0.432]
+  spec tok/s series                   : [24.84, 21.59, 19.01]
+  plain tok/s series                  : [52.3, 52.2, 43.99]
+
+==============================================================================
+batch = 4
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 64
+  speculative rounds                  : 6
+  verify passes (batched)             : 6
+  verify passes (per-sequence)        : 18
+  verify passes saved                 : 12
+  all target passes (incl. prefill)   : 15
+  sequences verified per round        : 3.0
+  draft acceptance rate               : 0.4583
+  tokens per target pass  spec / plain: 4.267 / 3.368
+  wall-clock speedup (median of 3)     : 0.346x  [0.319-0.353]
+  speedup series                      : [0.346, 0.319, 0.353]
+  spec tok/s series                   : [28.08, 25.93, 27.95]
+  plain tok/s series                  : [81.12, 81.38, 79.28]
+
+==============================================================================
+Verdict
+==============================================================================
+  - Lossless at every batch size: True.
+  - Batched verification saved verify passes in 2/2 multi-sequence configurations (a batch of one has nothing to batch).
+  - Peak sequences verified per target pass: 3.0. A per-sequence verifier would have needed that many passes per round, so this is the factor by which speculation and batching compose rather than conflict.
+  - Wall-clock speedup on NVIDIA A100-SXM4-40GB: 0.35x-0.50x.
+  - Values below 1.0 are not a defect of the composition. The draft runs K passes serially per sequence per round, and this model pair (Qwen/Qwen2.5-1.5B-Instruct against Qwen/Qwen2.5-0.5B-Instruct) is too close in cost for that to pay.
+  - Note that this is *worse* on GPU than on CPU, which is the expected direction: a single target pass on a GPU is latency-bound rather than compute-bound, so it is already cheap, and the draft's serial passes dominate a larger share of the round. Speculation needs the target pass to be genuinely expensive before skipping some of them pays -- that means a much larger target, not merely a faster device.
+  - So the plan's 2-3x claim is still neither confirmed nor refuted: it is about an 8B-class target, and this GPU has 39.5 GB of VRAM, which will not hold one in fp16.
+
+Wrote benchmarks/results/speculative_batching.json

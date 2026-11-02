@@ -1,0 +1,160 @@
+=== gpu-r1-qwen7b :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r1-qwen7b :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r1-qwen7b :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r1-qwen7b :: speculative
+exit=1 RuntimeError: The size of tensor a (152064) must match the size of tensor b (151936) at non-singleton dimension 0
+=== gpu-r1-qwen3-8b :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r1-qwen3-8b :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r1-qwen3-8b :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r1-qwen3-8b :: speculative
+exit=1 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r1-qwen3b :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r1-qwen3b :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r1-qwen3b :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r1-qwen3b :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r1-qwen15 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r1-qwen15 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r1-qwen15 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r1-qwen15 :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r1-qwen05 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r1-qwen05 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r1-qwen05 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r1-smol360 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r1-smol360 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r1-smol360 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r1-smol360 :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r1-smol135 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r1-smol135 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r1-smol135 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+ROUND 1 DONE
+=== gpu-r2-qwen7b :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r2-qwen7b :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r2-qwen7b :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r2-qwen7b :: speculative
+exit=1 RuntimeError: The size of tensor a (152064) must match the size of tensor b (151936) at non-singleton dimension 0
+=== gpu-r2-qwen3-8b :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r2-qwen3-8b :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r2-qwen3-8b :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r2-qwen3-8b :: speculative
+exit=1 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r2-qwen3b :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r2-qwen3b :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r2-qwen3b :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r2-qwen3b :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r2-qwen15 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r2-qwen15 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r2-qwen15 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r2-qwen15 :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r2-qwen05 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r2-qwen05 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r2-qwen05 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r2-smol360 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r2-smol360 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r2-smol360 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r2-smol360 :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r2-smol135 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r2-smol135 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r2-smol135 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+ROUND 2 DONE
+=== gpu-r3-qwen7b :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r3-qwen7b :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r3-qwen7b :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r3-qwen7b :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r3-qwen3-8b :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r3-qwen3-8b :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r3-qwen3-8b :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r3-qwen3-8b :: speculative
+exit=1 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r3-qwen3b :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r3-qwen3b :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r3-qwen3b :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r3-qwen3b :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r3-qwen15 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r3-qwen15 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r3-qwen15 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r3-qwen15 :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r3-qwen05 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r3-qwen05 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r3-qwen05 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r3-smol360 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r3-smol360 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r3-smol360 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-r3-smol360 :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== gpu-r3-smol135 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-r3-smol135 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-r3-smol135 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+ROUND 3 DONE
+GPU_ALL_DONE

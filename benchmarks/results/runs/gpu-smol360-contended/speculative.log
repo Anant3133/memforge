@@ -1,0 +1,48 @@
+
+==============================================================================
+Phase D - speculative decoding inside continuous batching
+==============================================================================
+target model : HuggingFaceTB/SmolLM2-360M-Instruct
+draft model  : HuggingFaceTB/SmolLM2-135M-Instruct
+lookahead K  : 4  (scheduler reserves K+1 = 5 slots per sequence per step)
+device       : cuda:0 torch.float16
+Loading weights:   0%|                                                                                                                                        | 0/290 [00:00<?, ?it/s]Loading weights:  48%|███████████████████████████████████████████████████████████                                                                 | 138/290 [00:00<00:00, 1351.60it/s]Loading weights:  97%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▋    | 280/290 [00:00<00:00, 1391.44it/s]Loading weights: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 290/290 [00:00<00:00, 1399.47it/s]
+Loading weights:   0%|                                                                                                                                        | 0/272 [00:00<?, ?it/s]Loading weights:  83%|███████████████████████████████████████████████████████████████████████████████████████████████████████                     | 226/272 [00:00<00:00, 2224.70it/s]Loading weights: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 272/272 [00:00<00:00, 2345.75it/s]
+
+==============================================================================
+batch = 1
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 16
+  speculative rounds                  : 4
+  verify passes (batched)             : 4
+  verify passes (per-sequence)        : 4
+  verify passes saved                 : 0
+  all target passes (incl. prefill)   : 6
+  sequences verified per round        : 1.0
+  draft acceptance rate               : 0.625
+  tokens per target pass  spec / plain: 2.667 / 1.0
+  wall-clock speedup (median of 3)     : 0.653x  [0.648-0.656]
+  speedup series                      : [0.648, 0.656, 0.653]
+  spec tok/s series                   : [12.09, 12.23, 12.18]
+  plain tok/s series                  : [18.65, 18.63, 18.66]
+
+==============================================================================
+batch = 2
+==============================================================================
+Traceback (most recent call last):
+  File "/workspace/memforge/benchmarks/run_speculative_batching.py", line 449, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/workspace/memforge/benchmarks/run_speculative_batching.py", line 226, in main
+    run_scenario(
+  File "/workspace/memforge/benchmarks/run_speculative_batching.py", line 102, in run_scenario
+    engine = ContinuousBatchingEngine(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/memforge/memforge_ml/runtime/continuous_engine.py", line 189, in __init__
+    self.pool = PagedKVPool(self.spec, num_blocks=num_blocks, block_size=block_size)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/memforge/memforge_ml/runtime/kv_pool.py", line 67, in __init__
+    self.key_pool = torch.zeros(shape, dtype=spec.dtype, device=spec.device)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 100.00 MiB. GPU 0 has a total capacity of 39.49 GiB of which 23.81 MiB is free. Process 1942522 has 5.01 GiB memory in use. Process 1488587 has 2.40 GiB memory in use. Process 3600730 has 29.58 GiB memory in use. Process 4108856 has 2.45 GiB memory in use. Of the allocated memory 1.92 GiB is allocated by PyTorch, and 27.90 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

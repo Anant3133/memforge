@@ -1,0 +1,22 @@
+{
+  "Qwen/Qwen3-0.6B": {
+    "layers": 28,
+    "ms_per_token": 28.75,
+    "gpu_busy_ms": 7.6
+  },
+  "Qwen/Qwen3-1.7B": {
+    "layers": 28,
+    "ms_per_token": 34.56,
+    "gpu_busy_ms": 9.56
+  },
+  "Qwen/Qwen3-4B": {
+    "layers": 36,
+    "ms_per_token": 45.51,
+    "gpu_busy_ms": 15.23
+  },
+  "Qwen/Qwen3-8B": {
+    "layers": 36,
+    "ms_per_token": 45.28,
+    "gpu_busy_ms": 18.18
+  }
+}

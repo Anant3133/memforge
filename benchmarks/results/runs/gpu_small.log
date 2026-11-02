@@ -1,0 +1,15 @@
+=== gpu-smol360-contended :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-smol360-contended :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-smol360-contended :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== gpu-smol360-contended :: speculative
+exit=1 torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 100.00 MiB. GPU 0 has a total capacity of 39.49 GiB of which 23.81 MiB is free. Process 1942522 has 5.01 GiB memory in use. Process 1488587 has 2.40 GiB memory in use. Process 3600730 has 29.58 GiB memory in use. Process 4108856 has 2.45 GiB memory in use. Of the allocated memory 1.92 GiB is allocated by PyTorch, and 27.90 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+=== gpu-qwen05-contended :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== gpu-qwen05-contended :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== gpu-qwen05-contended :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+GPU_SMALL_DONE

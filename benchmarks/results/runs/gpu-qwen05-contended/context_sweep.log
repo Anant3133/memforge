@@ -1,0 +1,82 @@
+
+==============================================================================
+MemForge Phase A — paged vs contiguous across context lengths
+==============================================================================
+model       : Qwen/Qwen2.5-0.5B-Instruct
+contexts    : [128, 512, 1024]
+decode steps: 8 per run, 9 interleaved repeats
+block size  : 16
+device      : cuda:0 torch.float16 (torch 2.8.0+cu126)
+Loading weights:   0%|                                                                                                                                        | 0/290 [00:00<?, ?it/s]Loading weights:   0%|▍                                                                                                                               | 1/290 [00:00<01:13,  3.95it/s]Loading weights:  92%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████          | 267/290 [00:00<00:00, 957.43it/s]Loading weights: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 290/290 [00:00<00:00, 792.67it/s]
+geometry    : 24 layers, 2 kv heads, head_dim 64, 12288 bytes/token
+
+==============================================================================
+context 128 tokens
+==============================================================================
+  repeat 1: contiguous  39.78 tok/s | paged  26.29 tok/s
+  repeat 2: contiguous  40.24 tok/s | paged  25.98 tok/s
+  repeat 3: contiguous  41.15 tok/s | paged  26.08 tok/s
+  repeat 4: contiguous  36.72 tok/s | paged  26.12 tok/s
+  repeat 5: contiguous  39.90 tok/s | paged  25.80 tok/s
+  repeat 6: contiguous  40.59 tok/s | paged  26.08 tok/s
+  repeat 7: contiguous  41.20 tok/s | paged  26.36 tok/s
+  repeat 8: contiguous  35.03 tok/s | paged  25.88 tok/s
+  repeat 9: contiguous  38.70 tok/s | paged  25.66 tok/s
+
+  median contiguous : 39.90 tok/s
+  median paged      : 26.08 tok/s
+  relative          : 0.647x   (outside 5% of contiguous)
+  prefill median    : contiguous 0.020s | paged 0.026s
+  output identical  : YES
+
+==============================================================================
+context 512 tokens
+==============================================================================
+  repeat 1: contiguous  37.88 tok/s | paged  25.69 tok/s
+  repeat 2: contiguous  38.65 tok/s | paged  25.38 tok/s
+  repeat 3: contiguous  39.43 tok/s | paged  25.37 tok/s
+  repeat 4: contiguous  39.65 tok/s | paged  25.28 tok/s
+  repeat 5: contiguous  39.56 tok/s | paged  25.33 tok/s
+  repeat 6: contiguous  38.58 tok/s | paged  25.39 tok/s
+  repeat 7: contiguous  39.14 tok/s | paged  25.29 tok/s
+  repeat 8: contiguous  38.22 tok/s | paged  25.69 tok/s
+  repeat 9: contiguous  39.71 tok/s | paged  25.19 tok/s
+
+  median contiguous : 39.14 tok/s
+  median paged      : 25.37 tok/s
+  relative          : 0.646x   (outside 5% of contiguous)
+  prefill median    : contiguous 0.020s | paged 0.027s
+  output identical  : YES
+
+==============================================================================
+context 1024 tokens
+==============================================================================
+  repeat 1: contiguous  32.97 tok/s | paged  24.79 tok/s
+  repeat 2: contiguous  38.04 tok/s | paged  24.73 tok/s
+  repeat 3: contiguous  36.36 tok/s | paged  24.62 tok/s
+  repeat 4: contiguous  36.61 tok/s | paged  24.73 tok/s
+  repeat 5: contiguous  38.05 tok/s | paged  24.89 tok/s
+  repeat 6: contiguous  37.52 tok/s | paged  24.02 tok/s
+  repeat 7: contiguous  38.09 tok/s | paged  24.92 tok/s
+  repeat 8: contiguous  36.44 tok/s | paged  24.67 tok/s
+  repeat 9: contiguous  36.21 tok/s | paged  24.74 tok/s
+
+  median contiguous : 36.61 tok/s
+  median paged      : 24.73 tok/s
+  relative          : 0.676x   (outside 5% of contiguous)
+  prefill median    : contiguous 0.020s | paged 0.027s
+  output identical  : YES
+
+==============================================================================
+Summary
+==============================================================================
+  context   contiguous      paged   relative           spread  within 5%  identical
+      128        39.90      26.08      0.647      0.642-0.711      False       True
+      512        39.14      25.37      0.646      0.637-0.672      False       True
+     1024        36.61      24.73      0.676      0.650-0.683      False       True
+
+Worst case: 0.646x at 512 tokens.
+
+Paged output byte-identical to contiguous at every context length.
+
+Wrote benchmarks/results/context_sweep.json

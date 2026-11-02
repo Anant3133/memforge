@@ -1,0 +1,54 @@
+
+==============================================================================
+MemForge Phase A — paged vs contiguous across context lengths
+==============================================================================
+model       : Qwen/Qwen2.5-3B-Instruct
+contexts    : [128, 512]
+decode steps: 8 per run, 5 interleaved repeats
+block size  : 16
+device      : cpu torch.float32 (torch 2.8.0+cu126)
+Loading weights:   0%|                                                                                                                                        | 0/434 [00:00<?, ?it/s]Loading weights:   0%|▎                                                                                                                               | 1/434 [00:00<05:25,  1.33it/s]Loading weights:  34%|██████████████████████████████████████████▎                                                                                  | 147/434 [00:00<00:01, 226.34it/s]Loading weights:  50%|██████████████████████████████████████████████████████████████▊                                                              | 218/434 [00:01<00:00, 233.88it/s]Loading weights:  62%|█████████████████████████████████████████████████████████████████████████████▏                                               | 268/434 [00:01<00:00, 230.34it/s]Loading weights:  71%|████████████████████████████████████████████████████████████████████████████████████████▍                                    | 307/434 [00:01<00:00, 230.53it/s]Loading weights:  79%|██████████████████████████████████████████████████████████████████████████████████████████████████▏                          | 341/434 [00:01<00:00, 226.27it/s]Loading weights:  86%|████████████████████████████████████████████████████████████████████████████████████████████████████████████                 | 375/434 [00:01<00:00, 230.83it/s]Loading weights:  93%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████         | 403/434 [00:01<00:00, 233.83it/s]Loading weights: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 434/434 [00:02<00:00, 210.11it/s]
+geometry    : 36 layers, 2 kv heads, head_dim 128, 73728 bytes/token
+
+==============================================================================
+context 128 tokens
+==============================================================================
+  repeat 1: contiguous   1.45 tok/s | paged   1.54 tok/s
+  repeat 2: contiguous   1.52 tok/s | paged   1.57 tok/s
+  repeat 3: contiguous   1.50 tok/s | paged   1.43 tok/s
+  repeat 4: contiguous   1.56 tok/s | paged   1.57 tok/s
+  repeat 5: contiguous   1.65 tok/s | paged   1.62 tok/s
+
+  median contiguous : 1.52 tok/s
+  median paged      : 1.57 tok/s
+  relative          : 1.008x   (within 5% of contiguous)
+  prefill median    : contiguous 2.421s | paged 2.361s
+  output identical  : YES
+
+==============================================================================
+context 512 tokens
+==============================================================================
+  repeat 1: contiguous   1.54 tok/s | paged   1.54 tok/s
+  repeat 2: contiguous   1.40 tok/s | paged   1.33 tok/s
+  repeat 3: contiguous   1.37 tok/s | paged   1.30 tok/s
+  repeat 4: contiguous   1.32 tok/s | paged   1.36 tok/s
+  repeat 5: contiguous   1.50 tok/s | paged   1.44 tok/s
+
+  median contiguous : 1.40 tok/s
+  median paged      : 1.36 tok/s
+  relative          : 0.963x   (within 5% of contiguous)
+  prefill median    : contiguous 3.599s | paged 3.375s
+  output identical  : YES
+
+==============================================================================
+Summary
+==============================================================================
+  context   contiguous      paged   relative           spread  within 5%  identical
+      128         1.52       1.57      1.008      0.953-1.062       True       True
+      512         1.40       1.36      0.963      0.947-1.031  UNDECIDED       True
+
+Worst case: 0.963x at 512 tokens.
+
+Paged output byte-identical to contiguous at every context length.
+
+Wrote benchmarks/results/context_sweep.json

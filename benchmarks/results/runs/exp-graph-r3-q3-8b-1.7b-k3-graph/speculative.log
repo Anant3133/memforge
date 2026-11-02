@@ -1,0 +1,78 @@
+
+==============================================================================
+Phase D - speculative decoding inside continuous batching
+==============================================================================
+target model : Qwen/Qwen3-8B
+draft model  : Qwen/Qwen3-1.7B
+lookahead K  : 3  (scheduler reserves K+1 = 4 slots per sequence per step)
+device       : cuda:0 torch.float16
+Loading weights:   0%|                                                                                                                                        | 0/399 [00:00<?, ?it/s]Loading weights:   0%|▎                                                                                                                               | 1/399 [00:00<05:19,  1.25it/s]Loading weights:   1%|▋                                                                                                                               | 2/399 [00:00<02:36,  2.54it/s]Loading weights:   7%|████████▎                                                                                                                      | 26/399 [00:01<00:09, 39.53it/s]Loading weights:   9%|███████████▊                                                                                                                   | 37/399 [00:01<00:07, 45.88it/s]Loading weights:  12%|███████████████▎                                                                                                               | 48/399 [00:01<00:06, 54.01it/s]Loading weights:  15%|██████████████████▊                                                                                                            | 59/399 [00:01<00:06, 53.31it/s]Loading weights:  18%|██████████████████████▎                                                                                                        | 70/399 [00:01<00:06, 50.33it/s]Loading weights:  20%|█████████████████████████▊                                                                                                     | 81/399 [00:01<00:05, 56.03it/s]Loading weights:  22%|████████████████████████████▎                                                                                                  | 89/399 [00:02<00:05, 60.04it/s]Loading weights:  24%|██████████████████████████████▌                                                                                                | 96/399 [00:02<00:05, 56.03it/s]Loading weights:  26%|████████████████████████████████▌                                                                                             | 103/399 [00:02<00:06, 48.78it/s]Loading weights:  29%|████████████████████████████████████                                                                                          | 114/399 [00:02<00:05, 51.71it/s]Loading weights:  31%|███████████████████████████████████████▍                                                                                      | 125/399 [00:02<00:04, 56.33it/s]Loading weights:  34%|██████████████████████████████████████████▉                                                                                   | 136/399 [00:02<00:04, 60.23it/s]Loading weights:  37%|██████████████████████████████████████████████▍                                                                               | 147/399 [00:03<00:04, 58.48it/s]Loading weights:  40%|█████████████████████████████████████████████████▉                                                                            | 158/399 [00:03<00:04, 52.05it/s]Loading weights:  42%|█████████████████████████████████████████████████████▎                                                                        | 169/399 [00:03<00:04, 55.33it/s]Loading weights:  45%|████████████████████████████████████████████████████████▊                                                                     | 180/399 [00:03<00:03, 57.92it/s]Loading weights:  48%|████████████████████████████████████████████████████████████▎                                                                 | 191/399 [00:03<00:03, 59.54it/s]Loading weights:  51%|███████████████████████████████████████████████████████████████▊                                                              | 202/399 [00:04<00:03, 63.36it/s]Loading weights:  53%|██████████████████████████████████████████████████████████████████▎                                                           | 210/399 [00:04<00:02, 63.81it/s]Loading weights:  56%|██████████████████████████████████████████████████████████████████████▋                                                       | 224/399 [00:04<00:02, 62.78it/s]Loading weights:  59%|██████████████████████████████████████████████████████████████████████████▏                                                   | 235/399 [00:04<00:02, 64.62it/s]Loading weights:  62%|█████████████████████████████████████████████████████████████████████████████▋                                                | 246/399 [00:04<00:02, 68.77it/s]Loading weights:  64%|████████████████████████████████████████████████████████████████████████████████▌                                             | 255/399 [00:04<00:01, 72.99it/s]Loading weights:  66%|███████████████████████████████████████████████████████████████████████████████████▋                                          | 265/399 [00:05<00:02, 66.48it/s]Loading weights:  69%|███████████████████████████████████████████████████████████████████████████████████████▏                                      | 276/399 [00:05<00:01, 64.17it/s]Loading weights:  72%|██████████████████████████████████████████████████████████████████████████████████████████▋                                   | 287/399 [00:05<00:01, 65.92it/s]Loading weights:  75%|██████████████████████████████████████████████████████████████████████████████████████████████                                | 298/399 [00:05<00:01, 68.13it/s]Loading weights:  78%|██████████████████████████████████████████████████████████████████████████████████████████████████▌                           | 312/399 [00:05<00:01, 62.33it/s]Loading weights:  81%|██████████████████████████████████████████████████████████████████████████████████████████████████████                        | 323/399 [00:05<00:01, 63.11it/s]Loading weights:  84%|█████████████████████████████████████████████████████████████████████████████████████████████████████████▍                    | 334/399 [00:06<00:01, 62.30it/s]Loading weights:  86%|████████████████████████████████████████████████████████████████████████████████████████████████████████████▉                 | 345/399 [00:06<00:00, 61.55it/s]Loading weights:  89%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████▍             | 356/399 [00:06<00:00, 61.08it/s]Loading weights:  92%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████▉          | 367/399 [00:06<00:00, 62.25it/s]Loading weights:  95%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▎      | 378/399 [00:06<00:00, 63.49it/s]Loading weights:  97%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▊   | 389/399 [00:06<00:00, 65.51it/s]Loading weights: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 399/399 [00:06<00:00, 57.10it/s]
+Loading weights:   0%|                                                                                                                                        | 0/311 [00:00<?, ?it/s]Loading weights:   0%|▍                                                                                                                               | 1/311 [00:00<04:02,  1.28it/s]Loading weights:  19%|████████████████████████                                                                                                       | 59/311 [00:00<00:02, 88.17it/s]Loading weights:  29%|████████████████████████████████████                                                                                          | 89/311 [00:01<00:01, 115.52it/s]Loading weights:  37%|██████████████████████████████████████████████▏                                                                              | 115/311 [00:01<00:01, 135.07it/s]Loading weights:  45%|███████████████████████████████████████████████████████▊                                                                     | 139/311 [00:01<00:01, 142.00it/s]Loading weights:  51%|████████████████████████████████████████████████████████████████▎                                                            | 160/311 [00:01<00:00, 151.85it/s]Loading weights:  58%|████████████████████████████████████████████████████████████████████████▎                                                    | 180/311 [00:01<00:00, 154.94it/s]Loading weights:  65%|█████████████████████████████████████████████████████████████████████████████████▌                                           | 203/311 [00:01<00:00, 170.80it/s]Loading weights:  72%|█████████████████████████████████████████████████████████████████████████████████████████▋                                   | 223/311 [00:01<00:00, 177.63it/s]Loading weights:  78%|█████████████████████████████████████████████████████████████████████████████████████████████████▋                           | 243/311 [00:01<00:00, 181.65it/s]Loading weights:  86%|███████████████████████████████████████████████████████████████████████████████████████████████████████████▋                 | 268/311 [00:01<00:00, 196.16it/s]Loading weights:  93%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▏        | 289/311 [00:02<00:00, 192.31it/s]Loading weights: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 311/311 [00:02<00:00, 142.88it/s]
+
+==============================================================================
+batch = 1
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 32
+  speculative rounds                  : 11
+  verify passes (batched)             : 11
+  verify passes (per-sequence)        : 11
+  verify passes saved                 : 0
+  all target passes (incl. prefill)   : 14
+  sequences verified per round        : 1.0
+  draft acceptance rate               : 0.5455
+  tokens per target pass  spec / plain: 2.286 / 1.0
+  wall-clock speedup (median of 3)     : 0.965x  [0.961-1.006]
+  speedup series                      : [0.961, 0.965, 1.006]
+  spec tok/s series                   : [22.19, 22.37, 22.33]
+  plain tok/s series                  : [23.09, 23.17, 22.2]
+
+==============================================================================
+batch = 2
+==============================================================================
+  output identical to non-speculative : True
+  tokens generated                    : 64
+  speculative rounds                  : 13
+  verify passes (batched)             : 13
+  verify passes (per-sequence)        : 24
+  verify passes saved                 : 11
+  all target passes (incl. prefill)   : 19
+  sequences verified per round        : 1.846
+  draft acceptance rate               : 0.4722
+  tokens per target pass  spec / plain: 3.368 / 1.939
+  wall-clock speedup (median of 3)     : 0.734x  [0.726-0.734]
+  speedup series                      : [0.734, 0.726, 0.734]
+  spec tok/s series                   : [25.03, 24.91, 25.2]
+  plain tok/s series                  : [34.09, 34.31, 34.34]
+
+==============================================================================
+batch = 4
+==============================================================================
+  output identical to non-speculative : False
+  !! speculation changed the output -- the numbers below are void
+  tokens generated                    : 128
+  speculative rounds                  : 13
+  verify passes (batched)             : 13
+  verify passes (per-sequence)        : 46
+  verify passes saved                 : 33
+  all target passes (incl. prefill)   : 21
+  sequences verified per round        : 3.538
+  draft acceptance rate               : 0.5145
+  tokens per target pass  spec / plain: 6.095 / 3.657
+  wall-clock speedup (median of 3)     : 0.550x  [0.548-0.552]
+  speedup series                      : [0.552, 0.55, 0.548]
+  spec tok/s series                   : [31.12, 31.03, 30.9]
+  plain tok/s series                  : [56.35, 56.38, 56.37]
+
+==============================================================================
+Verdict
+==============================================================================
+  - Lossless at every batch size: False.
+  - Batched verification saved verify passes in 2/2 multi-sequence configurations (a batch of one has nothing to batch).
+  - Peak sequences verified per target pass: 3.538. A per-sequence verifier would have needed that many passes per round, so this is the factor by which speculation and batching compose rather than conflict.
+  - Wall-clock speedup on NVIDIA A100-SXM4-40GB: 0.55x-0.96x.
+  - Values below 1.0 are not a defect of the composition. The draft runs K passes serially per sequence per round, and this model pair (Qwen/Qwen3-8B against Qwen/Qwen3-1.7B) is too close in cost for that to pay.
+  - Note that this is *worse* on GPU than on CPU, which is the expected direction: a single target pass on a GPU is latency-bound rather than compute-bound, so it is already cheap, and the draft's serial passes dominate a larger share of the round. Speculation needs the target pass to be genuinely expensive before skipping some of them pays -- that means a much larger target, not merely a faster device.
+  - So the plan's 2-3x claim is still neither confirmed nor refuted: it is about an 8B-class target, and this GPU has 39.5 GB of VRAM, which will not hold one in fp16.
+
+Wrote benchmarks/results/speculative_batching.json

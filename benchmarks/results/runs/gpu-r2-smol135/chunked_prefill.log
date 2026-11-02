@@ -1,0 +1,75 @@
+
+==============================================================================
+MemForge Phase C — does a long prompt stall in-flight decoding?
+==============================================================================
+model            : HuggingFaceTB/SmolLM2-135M-Instruct
+intruding prompt : 512 tokens
+victim           : 32-token prompt, 16 tokens generated
+budgets          : [0, 64, 16, 4]  (0 = unlimited, the old behaviour)
+Loading weights:   0%|                                                                                                                                        | 0/272 [00:00<?, ?it/s]Loading weights: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 272/272 [00:00<00:00, 2789.62it/s]
+
+==============================================================================
+prefill budget: unlimited tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 27.373 ms
+  median gap after       : 27.239 ms
+  p99 gap                : 91.187 ms  (3.33x the victim's own median)
+  worst gap              : 92.691 ms  (3.39x)
+  prefill chunks         : 2
+  fused steps            : 0
+  forward passes         : 17
+  intruder TTFT          : 60.0 ms
+
+==============================================================================
+prefill budget: 64 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 29.249 ms
+  median gap after       : 58.171 ms
+  p99 gap                : 58.993 ms  (2.02x the victim's own median)
+  worst gap              : 59.027 ms  (2.02x)
+  prefill chunks         : 9
+  fused steps            : 0
+  forward passes         : 24
+  intruder TTFT          : 467.9 ms
+
+==============================================================================
+prefill budget: 16 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 26.939 ms
+  median gap after       : 58.823 ms
+  p99 gap                : 61.752 ms  (2.29x the victim's own median)
+  worst gap              : 62.017 ms  (2.3x)
+  prefill chunks         : 34
+  fused steps            : 0
+  forward passes         : 50
+  intruder TTFT          : 1330.2 ms
+
+==============================================================================
+prefill budget: 4 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 27.218 ms
+  median gap after       : 58.457 ms
+  p99 gap                : 61.361 ms  (2.25x the victim's own median)
+  worst gap              : 61.649 ms  (2.27x)
+  prefill chunks         : 136
+  fused steps            : 0
+  forward passes         : 152
+  intruder TTFT          : 4365.6 ms
+
+==============================================================================
+Summary
+==============================================================================
+    budget  fused  median before       p99   p99 x     worst   worst x  chunks  passes
+ unlimited     no          27.37     91.19    3.33     92.69      3.39       2      17
+        64     no          29.25     58.99    2.02     59.03      2.02       9      24
+        16     no          26.94     61.75    2.29     62.02      2.30      34      50
+         4     no          27.22     61.36    2.25     61.65      2.27     136     152
+
+Worst-case stall: 92.7 ms unlimited vs 59.0 ms at budget 64 (1.6x better)
+Phase C bullet 1 (chunked prefill): worst-case stall cut 1.6x, from 3.39x the victim's median to 2.02x at budget 64. Target NOT met, and the residual is understood. Without fusion the ratio asymptotes near 2.5x because a step carrying a chunk runs TWO forward passes, one for the chunk and one for the decode batch. Re-run with --fused to measure bullet 2, which removes that second pass.
+
+Wrote benchmarks/results/chunked_prefill.json

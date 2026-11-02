@@ -1,0 +1,152 @@
+{
+  "benchmark": "context_sweep",
+  "phase": "A",
+  "generated_at": "2026-11-01T18:52:56",
+  "platform": {
+    "platform": "Linux-5.15.0-1053-nvidia-x86_64-with-glibc2.39",
+    "system": "Linux",
+    "python": "3.12.3",
+    "torch": "2.8.0+cu126",
+    "torch_cuda": "12.6",
+    "cuda_available": true,
+    "device": "cpu",
+    "dtype": "torch.float32",
+    "device_name": null,
+    "compute_capability": null,
+    "vram_total_mb": null,
+    "vram_free_mb": null
+  },
+  "peak_memory_mb": null,
+  "vram_spill": {
+    "checked": false,
+    "spilled": null,
+    "peak_mb": null
+  },
+  "config": {
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "contexts": [
+      128,
+      512,
+      1024
+    ],
+    "steps": 8,
+    "repeats": 9,
+    "warmup": 2,
+    "block_size": 16,
+    "concurrency": null
+  },
+  "model_geometry": {
+    "num_layers": 24,
+    "num_kv_heads": 2,
+    "head_dim": 64,
+    "bytes_per_token": 24576
+  },
+  "all_outputs_identical": true,
+  "rows": [
+    {
+      "context_tokens": 128,
+      "contiguous_tok_per_s": 5.932,
+      "paged_tok_per_s": 5.912,
+      "relative_throughput": 0.9974,
+      "relative_throughput_min": 0.9537,
+      "relative_throughput_max": 1.0156,
+      "within_5_percent": true,
+      "verdict_decided": true,
+      "contiguous_prefill_s": 0.4345,
+      "paged_prefill_s": 0.4419,
+      "output_identical": true,
+      "contiguous_samples": [
+        4.72,
+        4.664,
+        6.218,
+        5.932,
+        6.026,
+        6.199,
+        6.032,
+        5.794,
+        5.9
+      ],
+      "paged_samples": [
+        5.691,
+        4.685,
+        6.094,
+        6.018,
+        5.948,
+        5.912,
+        6.126,
+        5.215,
+        5.885
+      ]
+    },
+    {
+      "context_tokens": 512,
+      "contiguous_tok_per_s": 5.77,
+      "paged_tok_per_s": 5.712,
+      "relative_throughput": 0.9869,
+      "relative_throughput_min": 0.9701,
+      "relative_throughput_max": 1.0522,
+      "within_5_percent": true,
+      "verdict_decided": true,
+      "contiguous_prefill_s": 1.0034,
+      "paged_prefill_s": 0.9872,
+      "output_identical": true,
+      "contiguous_samples": [
+        6.017,
+        6.207,
+        6.049,
+        5.555,
+        5.293,
+        5.781,
+        5.428,
+        5.523,
+        5.77
+      ],
+      "paged_samples": [
+        5.837,
+        6.078,
+        5.584,
+        5.611,
+        5.73,
+        5.697,
+        5.712,
+        5.45,
+        5.747
+      ]
+    },
+    {
+      "context_tokens": 1024,
+      "contiguous_tok_per_s": 5.543,
+      "paged_tok_per_s": 5.38,
+      "relative_throughput": 0.9692,
+      "relative_throughput_min": 0.9473,
+      "relative_throughput_max": 1.0345,
+      "within_5_percent": true,
+      "verdict_decided": false,
+      "contiguous_prefill_s": 2.0191,
+      "paged_prefill_s": 2.0508,
+      "output_identical": true,
+      "contiguous_samples": [
+        5.531,
+        5.543,
+        5.608,
+        4.436,
+        5.68,
+        5.694,
+        5.458,
+        5.528,
+        5.8
+      ],
+      "paged_samples": [
+        5.316,
+        5.289,
+        4.928,
+        5.195,
+        5.38,
+        5.722,
+        5.485,
+        5.719,
+        5.622
+      ]
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+=== exp-draft-q7b-from-0.5b
+exit=0  draft acceptance rate : 0.4643; wall-clock speedup (median of 3) : 0.634x [0.614-0.647]; draft acceptance rate : 0.3194; wall-clock speedup (median of 3) : 0.403x [0.397-0.404]; draft acceptance rate
+=== exp-draft-q7b-from-1.5b
+exit=0  draft acceptance rate : 0.375; wall-clock speedup (median of 3) : 0.504x [0.498-0.506]; draft acceptance rate : 0.3906; wall-clock speedup (median of 3) : 0.405x [0.399-0.405]; draft acceptance rate 
+=== exp-draft-q3-8b-from-0.6b
+exit=1  draft acceptance rate : 0.5; wall-clock speedup (median of 3) : 0.680x [0.675-0.721]; draft acceptance rate : 0.5357; wall-clock speedup (median of 3) : 0.483x [0.470-0.507]; draft acceptance rate : 
+=== exp-draft-q3-8b-from-1.7b
+exit=1  draft acceptance rate : 0.4643; wall-clock speedup (median of 3) : 0.667x [0.645-0.679]; draft acceptance rate : 0.375; wall-clock speedup (median of 3) : 0.437x [0.419-0.439]; draft acceptance rate 
+=== exp-draft-q3-8b-from-4b
+exit=1  draft acceptance rate : 0.7; wall-clock speedup (median of 3) : 0.726x [0.685-0.775];
+=== exp-lookahead-q3-8b-k2
+exit=0  draft acceptance rate : 0.55; wall-clock speedup (median of 3) : 0.674x [0.672-0.724]; draft acceptance rate : 0.575; wall-clock speedup (median of 3) : 0.563x [0.525-0.570]; draft acceptance rate : 
+=== exp-lookahead-q3-8b-k3
+exit=1  draft acceptance rate : 0.619; wall-clock speedup (median of 3) : 0.756x [0.752-0.762]; draft acceptance rate : 0.5; wall-clock speedup (median of 3) : 0.499x [0.490-0.526]; draft acceptance rate : 0
+=== exp-lookahead-q3-8b-k6
+exit=1  draft acceptance rate : 0.3095; wall-clock speedup (median of 3) : 0.522x [0.521-0.523]; draft acceptance rate : 0.2857; wall-clock speedup (median of 3) : 0.387x [0.386-0.387]; draft acceptance rate
+=== exp-lookahead-q3-8b-k8
+exit=1  draft acceptance rate : 0.275; wall-clock speedup (median of 3) : 0.534x [0.533-0.537]; draft acceptance rate : 0.2625; wall-clock speedup (median of 3) : 0.406x [0.405-0.407]; draft acceptance rate 
+=== exp-exact-q3-4b-fp16
+exit=0  draft acceptance rate : 0.375; wall-clock speedup (median of 3) : 0.588x [0.581-0.594]; draft acceptance rate : 0.4821; wall-clock speedup (median of 3) : 0.503x [0.503-0.504]; draft acceptance rate 
+=== exp-exact-q3-4b-fp32
+exit=0  draft acceptance rate : 0.375; wall-clock speedup (median of 3) : 0.595x [0.593-0.595]; draft acceptance rate : 0.4821; wall-clock speedup (median of 3) : 0.471x [0.468-0.472]; draft acceptance rate 
+=== exp-exact-q3-4b-bf16
+exit=1  draft acceptance rate : 0.375; wall-clock speedup (median of 3) : 0.586x [0.583-0.586]; draft acceptance rate : 0.3594; wall-clock speedup (median of 3) : 0.454x [0.447-0.458]; draft acceptance rate 
+=== stress Qwen2.5-0.5B-Instruct
+exit=0    wrote benchmarks/results/stress_test.json 
+=== stress Qwen2.5-1.5B-Instruct
+exit=0    wrote benchmarks/results/stress_test.json 
+=== stress Qwen2.5-3B-Instruct
+exit=0    wrote benchmarks/results/stress_test.json 
+=== stress Qwen2.5-7B-Instruct
+exit=0    wrote benchmarks/results/stress_test.json 
+=== stress Qwen3-8B
+exit=0    wrote benchmarks/results/stress_test.json 
+EXPERIMENTS_DONE

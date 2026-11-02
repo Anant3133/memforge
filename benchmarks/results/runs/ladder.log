@@ -1,0 +1,39 @@
+=== cpu-smol360 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== cpu-smol360 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== cpu-smol360 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== cpu-smol360 :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== cpu-qwen05 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== cpu-qwen05 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== cpu-qwen05 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== cpu-qwen15 :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== cpu-qwen15 :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== cpu-qwen15 :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== cpu-qwen15 :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== cpu-qwen3b :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== cpu-qwen3b :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== cpu-qwen3b :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== cpu-qwen3b :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+=== cpu-qwen7b :: prefix_sharing
+exit=0 Wrote benchmarks/results/prefix_sharing.json
+=== cpu-qwen7b :: context_sweep
+exit=0 Wrote benchmarks/results/context_sweep.json
+=== cpu-qwen7b :: chunked_prefill
+exit=0 Wrote benchmarks/results/chunked_prefill.json
+=== cpu-qwen7b :: speculative
+exit=0 Wrote benchmarks/results/speculative_batching.json
+LADDER_DONE
