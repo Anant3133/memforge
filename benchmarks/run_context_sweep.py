@@ -211,6 +211,70 @@ def decode_paged(model, spec: ModelKVSpec, prompt_ids: List[int], steps: int,
     }
 
 
+
+# -------------------------------------------------------------- graphed arms
+
+class GraphedArms:
+    """
+    CUDA-graph versions of both paths, built once per context length.
+
+    The A100 result for eager paged decode (0.85-0.94x of eager contiguous) is
+    a launch-overhead measurement, so the fair question is what each path costs
+    once launch overhead is removed from *both*. `contiguous_graphed` is a
+    static-cache graph of the stock model; `paged_graphed` is the paged step
+    captured whole. Graphs are captured during warmup and reused, so the timed
+    region contains replays only.
+    """
+
+    def __init__(self, model, spec, prompt_len, steps, block_size):
+        from memforge_ml.runtime.batched_speculative import GraphedDraftPool
+        from memforge_ml.runtime.graphed_paged_decode import GraphedPagedDecoder
+
+        self.model, self.spec, self.bs = model, spec, block_size
+        total = prompt_len + steps + 2
+        self.cpool = GraphedDraftPool(model, max_len=total, num_slots=1, device=str(spec.device))
+        blocks = (total + block_size - 1) // block_size + 2
+        self.pool = PagedKVPool(spec, num_blocks=blocks, block_size=block_size)
+        self.blocks = blocks
+        self.pdec = GraphedPagedDecoder(model, self.pool, max_batch=1,
+                                        max_model_len=total, ctx_bucket=int(__import__("os").environ.get("CTX_BUCKET", "128")))
+
+    @torch.no_grad()
+    def contiguous(self, prompt_ids, steps):
+        st = self.cpool.acquire()
+        t0 = time.perf_counter()
+        logits = self.cpool.prefill(st, prompt_ids)
+        prefill_s = time.perf_counter() - t0
+        tokens = []
+        t0 = time.perf_counter()
+        for _ in range(steps):
+            tok = int(logits.argmax()); tokens.append(tok)
+            logits = self.cpool.step(st, tok)
+        decode_s = time.perf_counter() - t0
+        self.cpool.release(st)
+        return {"tokens": tokens, "prefill_s": prefill_s, "decode_s": decode_s,
+                "tok_per_s": steps / decode_s if decode_s > 0 else 0.0}
+
+    @torch.no_grad()
+    def paged(self, prompt_ids, steps):
+        cache = PagedCache(self.pool, list(range(self.blocks)))
+        ids = torch.tensor([prompt_ids], dtype=torch.long, device=_model_device(self.model))
+        t0 = time.perf_counter()
+        out = self.model(input_ids=ids, past_key_values=cache, use_cache=True)
+        prefill_s = time.perf_counter() - t0
+        table = cache.block_table_tensor_cached()
+        tokens = []
+        t0 = time.perf_counter()
+        logits = out.logits[0, -1]
+        for _ in range(steps):
+            tok = int(logits.argmax()); tokens.append(tok)
+            logits = self.pdec.step([tok], [cache.position], [table])[0]
+            for layer in cache.layers:
+                layer.position += 1
+        decode_s = time.perf_counter() - t0
+        return {"tokens": tokens, "prefill_s": prefill_s, "decode_s": decode_s,
+                "tok_per_s": steps / decode_s if decode_s > 0 else 0.0}
+
 # --------------------------------------------------------------- batched path
 
 def decode_batched(model, tokenizer, prompt_ids: List[int], concurrency: int,
@@ -274,6 +338,8 @@ def main() -> int:
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--kv-budget-mb", type=float, default=1024.0)
     parser.add_argument("--skip-batched", action="store_true")
+    parser.add_argument("--graphed", action="store_true",
+                        help="also measure CUDA-graphed paged and graphed contiguous (GPU only)")
     parser.add_argument("--view-cache", action="store_true",
                         help="also measure the append-only decode mirror (tier 2)")
     args = parser.parse_args()
@@ -320,6 +386,14 @@ def main() -> int:
         # contiguous-then-paged that cost lands entirely on contiguous and
         # flatters paging by several percent -- inside the 5% band we are trying
         # to measure.
+        arms = None
+        graphed_c, graphed_p = [], []
+        graphed_c_tokens = graphed_p_tokens = None
+        if args.graphed:
+            arms = GraphedArms(model, spec, len(prompt), args.steps, args.block_size)
+            for _ in range(max(2, args.warmup)):  # captures happen here, untimed
+                arms.contiguous(prompt, args.steps)
+                arms.paged(prompt, args.steps)
         for _ in range(max(0, args.warmup)):
             decode_contiguous(model, prompt, args.steps)
             decode_paged(model, spec, prompt, args.steps, args.block_size)
@@ -335,6 +409,13 @@ def main() -> int:
             cont_tokens, paged_tokens = c["tokens"], p["tokens"]
             line = (f"  repeat {r + 1}: contiguous {c['tok_per_s']:6.2f} tok/s | "
                     f"paged {p['tok_per_s']:6.2f} tok/s")
+            if arms is not None:
+                gc_ = arms.contiguous(prompt, args.steps)
+                gp_ = arms.paged(prompt, args.steps)
+                graphed_c.append(gc_["tok_per_s"]); graphed_p.append(gp_["tok_per_s"])
+                graphed_c_tokens, graphed_p_tokens = gc_["tokens"], gp_["tokens"]
+                line += (f" | contiguous-graphed {gc_['tok_per_s']:6.2f} | "
+                         f"paged-graphed {gp_['tok_per_s']:6.2f}")
             if args.view_cache:
                 # Interleaved with the other two so all three see the same
                 # machine conditions.
@@ -410,6 +491,25 @@ def main() -> int:
             "contiguous_samples": [round(x, 3) for x in cont_rates],
             "paged_samples": [round(x, 3) for x in paged_rates],
         }
+        if arms is not None and graphed_p:
+            gc_med, gp_med = statistics.median(graphed_c), statistics.median(graphed_p)
+            row["graphed"] = {
+                "contiguous_graphed_tok_per_s": round(gc_med, 3),
+                "paged_graphed_tok_per_s": round(gp_med, 3),
+                "paged_graphed_vs_contiguous_graphed": round(gp_med / gc_med, 4),
+                "paged_graphed_vs_contiguous_eager": round(gp_med / cont, 4),
+                "paged_graphed_vs_paged_eager": round(gp_med / paged, 4),
+                "paged_graphed_output_matches_contiguous": graphed_p_tokens == cont_tokens,
+                "contiguous_graphed_output_matches_contiguous": graphed_c_tokens == cont_tokens,
+                "paged_graphed_samples": [round(x, 3) for x in graphed_p],
+                "contiguous_graphed_samples": [round(x, 3) for x in graphed_c],
+            }
+            g = row["graphed"]
+            print(f"  graphed: paged/contiguous = {g['paged_graphed_vs_contiguous_graphed']:.3f}x "
+                  f"(graphed both), paged-graphed/contiguous-eager = "
+                  f"{g['paged_graphed_vs_contiguous_eager']:.3f}x, "
+                  f"outputs match eager contiguous: paged {g['paged_graphed_output_matches_contiguous']}, "
+                  f"contiguous {g['contiguous_graphed_output_matches_contiguous']}")
         if args.view_cache and view_rates:
             row["view_cache"] = {
                 "tok_per_s": round(statistics.median(view_rates), 3),

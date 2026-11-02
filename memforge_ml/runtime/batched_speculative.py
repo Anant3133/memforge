@@ -295,6 +295,297 @@ class GraphedDraftPool:
         return out.logits[0, -1]
 
 
+def _make_layer_class():
+    from transformers.cache_utils import StaticLayer
+
+    class RowwiseStaticLayer(StaticLayer):
+        def __init__(self, max_cache_len, pos, rows_ref):
+            super().__init__(max_cache_len)
+            self.pos = pos            # (num_slots,) long, shared by every layer
+            self.rows_ref = rows_ref  # one-element list: rows live in this graph
+            self.prefill_row = None   # (row, start) while an eager prefill runs
+
+        def update(self, key_states, value_states, *args, **kwargs):
+            if self.prefill_row is not None:
+                row, start = self.prefill_row
+                n = key_states.shape[-2]
+                self.keys[row, :, start : start + n] = key_states[0]
+                self.values[row, :, start : start + n] = value_states[0]
+                return self.keys[row : row + 1], self.values[row : row + 1]
+            b = self.rows_ref[0]
+            idx = self.pos[:b]
+            ar = self._arange[:b]
+            self.keys[:b][ar, :, idx] = key_states[:, :, 0]
+            self.values[:b][ar, :, idx] = value_states[:, :, 0]
+            return self.keys[:b], self.values[:b]
+
+        def get_seq_length(self):
+            return 0
+
+    return RowwiseStaticLayer
+
+
+class BatchedGraphedDraftState:
+    """A sequence's handle on one row of a `BatchedGraphedDraftPool`."""
+
+    def __init__(self, pool: "BatchedGraphedDraftPool", slot: int):
+        self.pool = pool
+        self.slot = slot
+        self.position = 0
+
+    def reset(self) -> None:
+        self.position = 0
+
+    def rollback_to(self, position: int) -> None:
+        if position < 0:
+            raise ValueError(f"cannot roll a draft back to position {position}")
+        if position > self.position:
+            raise ValueError(f"draft is at {self.position}, behind the requested {position}")
+        self.position = position
+
+
+class BatchedGraphedDraftPool:
+    """
+    The draft model for *all* running sequences in one CUDA-graph replay.
+
+    `GraphedDraftPool` captured one graph per sequence, so a round of B
+    sequences still cost B*(K+1) replays and speculation lost at batch >= 2.
+    Here one cache has a row per slot and the graph decodes a whole bucket of
+    rows at once: a round is K+1 replays regardless of B.
+
+    * Row i is written at its own position (`pos[i]`), so sequences of
+      different lengths share a replay. Positions live in a device tensor and
+      the causal mask is computed *inside* the graph from it, so nothing host
+      side is baked in at capture time.
+    * Graphs are captured per bucket (1, 2, 4, ...) over rows [0:bucket), and
+      slots are handed out lowest-first, so a small batch uses a small graph.
+    * A row that is idle in a replay is parked at index `max_len`, a spare
+      column that no live sequence ever reads or writes.
+    * Greedy proposals never leave the GPU: argmax feeds the next replay and the
+      candidates are read back once per round.
+    """
+
+    def __init__(self, model, max_len: int, num_slots: int, device: str, unroll: bool = False):
+        if not str(device).startswith("cuda"):
+            raise ValueError("a CUDA graph draft needs a CUDA device")
+        impl = getattr(model.config, "_attn_implementation", None)
+        if impl != "sdpa":
+            raise ValueError(f"CUDA-graph draft needs attn_implementation='sdpa', got {impl!r}")
+        from transformers.cache_utils import Cache
+        self.unroll = unroll          # greedy rounds as ONE replay (K+1 steps unrolled)
+        self._ugraph = {}
+        self._uout = {}
+
+        self.model, self.device = model, device
+        self.max_len = max_len
+        self.park = max_len                 # spare column
+        self.L = max_len + 1
+        self.num_slots = num_slots
+        self._dtype = next(model.parameters()).dtype
+        cfg = model.config.get_text_config() if hasattr(model.config, "get_text_config") else model.config
+        n_layers = cfg.num_hidden_layers
+        kv_heads = getattr(cfg, "num_key_value_heads", cfg.num_attention_heads)
+        head_dim = getattr(cfg, "head_dim", None) or cfg.hidden_size // cfg.num_attention_heads
+
+        self._mem_pool = torch.cuda.graph_pool_handle()
+        self._pos = torch.full((num_slots,), self.park, dtype=torch.long, device=device)
+        self._tok = torch.zeros((num_slots, 1), dtype=torch.long, device=device)
+        self._mask = torch.zeros((num_slots, 1, 1, self.L), dtype=torch.bool, device=device)
+        self._arange_len = torch.arange(self.L, device=device)
+        self._rows = [num_slots]
+        layer_cls = _make_layer_class()
+        layers = []
+        ar = torch.arange(num_slots, device=device)
+        for _ in range(n_layers):
+            lay = layer_cls(self.L, self._pos, self._rows)
+            lay._arange = ar
+            probe = torch.zeros((num_slots, kv_heads, 1, head_dim), dtype=self._dtype, device=device)
+            lay.lazy_initialization(probe, probe)
+            layers.append(lay)
+        self.cache = Cache(layers=layers)
+        self._layers = layers
+        self._buckets = sorted({b for b in (1, 2, 4, 8, 16, 32, 64, num_slots) if b <= num_slots})
+        self._graph = {}
+        self._out = {}
+        self._free = list(range(num_slots))
+
+    def _vocab_width(self) -> int:
+        return self.model.get_output_embeddings().weight.shape[0]
+
+    # ------------------------------------------------------------- slots
+    def acquire(self) -> BatchedGraphedDraftState:
+        if not self._free:
+            raise RuntimeError("no free draft slot; raise num_slots to max_num_seqs")
+        self._free.sort(reverse=True)  # hand out the lowest slot first
+        return BatchedGraphedDraftState(self, self._free.pop())
+
+    def release(self, state: BatchedGraphedDraftState) -> None:
+        state.reset()
+        self._free.append(state.slot)
+
+    # ------------------------------------------------------------- graph
+    def _bucket_for(self, rows: int) -> int:
+        for b in self._buckets:
+            if b >= rows:
+                return b
+        raise ValueError(f"{rows} rows exceed {self.num_slots} slots")
+
+    @torch.no_grad()
+    def _forward(self, b: int):
+        """mask <- pos; one decode step for rows [0:b); pos += 1 (clamped)."""
+        self._rows[0] = b
+        pos = self._pos[:b]
+        self._mask[:b, 0, 0].copy_(self._arange_len[None, :] <= pos[:, None])
+        logits = self.model(
+            input_ids=self._tok[:b], position_ids=pos[:, None],
+            past_key_values=self.cache, attention_mask=self._mask[:b],
+            cache_position=self._cp0, use_cache=True,
+        ).logits[:, -1]
+        self._pos[:b].copy_(torch.clamp(pos + 1, max=self.park))
+        return logits
+
+    @torch.no_grad()
+    def _capture(self, b: int) -> None:
+        if not hasattr(self, "_cp0"):
+            self._cp0 = torch.zeros(1, dtype=torch.long, device=self.device)
+        # Warm up and capture with every row parked, so no live KV is touched.
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            for _ in range(3):
+                self._pos[:b].fill_(self.park)
+                self._tok[:b].zero_()
+                self._forward(b)
+        torch.cuda.current_stream().wait_stream(stream)
+        self._pos[:b].fill_(self.park)
+        g = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(g, pool=self._mem_pool):
+            self._out[b] = self._forward(b)
+        self._graph[b] = g
+
+    @torch.no_grad()
+    def _unrolled_body(self, b: int, k: int):
+        """K+1 decode steps with the greedy argmax fed back on-device."""
+        cands = torch.zeros((b, k), dtype=torch.long, device=self.device)
+        for j in range(k + 1):
+            logits = self._forward(b)
+            if j < k:
+                nxt = logits.argmax(-1)
+                cands[:, j] = nxt
+                self._tok[:b, 0].copy_(nxt)
+        return cands
+
+    @torch.no_grad()
+    def _capture_unrolled(self, b: int, k: int) -> None:
+        if not hasattr(self, "_cp0"):
+            self._cp0 = torch.zeros(1, dtype=torch.long, device=self.device)
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            for _ in range(2):
+                self._pos[:b].fill_(self.park)
+                self._tok[:b].zero_()
+                self._unrolled_body(b, k)
+        torch.cuda.current_stream().wait_stream(stream)
+        self._pos[:b].fill_(self.park)
+        g = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(g, pool=self._mem_pool):
+            self._uout[(b, k)] = self._unrolled_body(b, k)
+        self._ugraph[(b, k)] = g
+
+    @torch.no_grad()
+    def prefill(self, state: BatchedGraphedDraftState, tokens: Sequence[int]) -> None:
+        """Feed several tokens into this row eagerly (variable width)."""
+        n = len(tokens)
+        if state.position + n > self.max_len:
+            raise ValueError(f"draft context {state.position + n} exceeds {self.max_len}")
+        ids = torch.tensor([list(tokens)], dtype=torch.long, device=self.device)
+        cp = torch.arange(state.position, state.position + n, device=self.device)
+        for lay in self._layers:
+            lay.prefill_row = (state.slot, state.position)
+        try:
+            self.model(ids, past_key_values=self.cache, cache_position=cp,
+                       position_ids=cp[None], use_cache=True)
+        finally:
+            for lay in self._layers:
+                lay.prefill_row = None
+        state.position += n
+
+    @torch.no_grad()
+    def propose(self, states, tokens_list, lookahead, temperature):
+        """
+        K candidates for every state, K+1 replays in total.
+
+        Mirrors `_propose_graphed`: any backlog but the last pending token is
+        prefilled eagerly, then the last token and each candidate are fed one
+        replay at a time (the final candidate is fed too, so its KV survives a
+        fully accepted round).
+        """
+        for st, toks in zip(states, tokens_list):
+            pending = list(toks[st.position:])
+            if not pending:
+                raise ValueError(f"draft is at position {st.position} with only {len(toks)} tokens")
+            if len(pending) > 1:
+                self.prefill(st, pending[:-1])
+        rows = max(st.slot for st in states) + 1
+        b = self._bucket_for(rows)
+        if b not in self._graph:
+            self._capture(b)
+        pos_host = [self.park] * b
+        tok_host = [0] * b
+        for st, toks in zip(states, tokens_list):
+            pos_host[st.slot] = st.position
+            tok_host[st.slot] = toks[-1]
+        self._pos[:b].copy_(torch.tensor(pos_host, dtype=torch.long, device=self.device))
+        self._tok[:b, 0].copy_(torch.tensor(tok_host, dtype=torch.long, device=self.device))
+        slots = torch.tensor([st.slot for st in states], dtype=torch.long, device=self.device)
+
+        if self.unroll and temperature <= 0.0:
+            # The whole round -- K+1 steps and the greedy feedback -- is one replay.
+            if (b, lookahead) not in self._ugraph:
+                # capture parks every row; restore the real inputs afterwards
+                self._capture_unrolled(b, lookahead)
+                self._pos[:b].copy_(torch.tensor(pos_host, dtype=torch.long, device=self.device))
+                self._tok[:b, 0].copy_(torch.tensor(tok_host, dtype=torch.long, device=self.device))
+            self._ugraph[(b, lookahead)].replay()
+            cand_dev = self._uout[(b, lookahead)][slots]               # (rows, K)
+            cand = cand_dev.tolist()                                   # one host sync
+            V = self._vocab_width()
+            onehot = torch.zeros((len(states), lookahead, V), dtype=self._dtype, device=self.device)
+            onehot.scatter_(2, cand_dev[:, :, None], 1.0)
+            for st in states:
+                st.position += lookahead + 1
+            return [(cand[i], [onehot[i, j] for j in range(lookahead)]) for i in range(len(states))]
+
+        step_tokens, step_probs = [], []
+        for j in range(lookahead + 1):
+            self._graph[b].replay()
+            logits = self._out[b][slots]
+            if j == lookahead:
+                break  # the last replay only caches the final candidate's KV
+            probs = _probs_from_logits_rows(logits, temperature)
+            nxt = probs.argmax(-1) if temperature <= 0.0 else torch.multinomial(probs, 1)[:, 0]
+            step_tokens.append(nxt)
+            step_probs.append(probs)
+            self._tok[slots, 0] = nxt
+        cand = torch.stack(step_tokens, dim=1).tolist()  # one host sync per round
+        for st in states:
+            st.position += lookahead + 1
+        return [
+            (cand[i], [step_probs[j][i] for j in range(lookahead)])
+            for i in range(len(states))
+        ]
+
+
+def _probs_from_logits_rows(logits: torch.Tensor, temperature: float) -> torch.Tensor:
+    """`_probs_from_logits` for a (rows, vocab) block."""
+    if temperature <= 0.0:
+        out = torch.zeros_like(logits)
+        out.scatter_(1, logits.argmax(-1, keepdim=True), 1.0)
+        return out
+    return torch.softmax(logits / temperature, dim=-1)
+
+
 @torch.no_grad()
 def propose_draft_tokens(
     draft_model,

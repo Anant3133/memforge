@@ -29,8 +29,11 @@ import torch
 from transformers.cache_utils import DynamicCache
 
 from memforge_ml.kernels import attention_backend
+from memforge_ml.runtime.graphed_paged_decode import GraphedPagedDecoder
 from memforge_ml.kernels.batched_decode import BatchedDecodeBuffers, assemble_batch
 from memforge_ml.runtime.batched_speculative import (
+    BatchedGraphedDraftPool,
+    BatchedGraphedDraftState,
     DraftState,
     GraphedDraftPool,
     propose_draft_tokens,
@@ -146,7 +149,8 @@ class ContinuousBatchingEngine:
         draft_model=None,
         lookahead_k: int = 0,
         fused_prefill: bool = False,
-        draft_cuda_graph: bool = False,
+        draft_cuda_graph=False,  # False | True (per-sequence graphs) | "batched"
+        paged_cuda_graph: bool = False,
     ):
         if not HAS_CPP_ENGINE:
             raise RuntimeError(
@@ -197,6 +201,14 @@ class ContinuousBatchingEngine:
             self.spec.num_layers, block_size=block_size
         )
 
+        # Optional: the whole plain decode step (index translation, KV write,
+        # gather, forward) as one replayed CUDA graph. See graphed_paged_decode.
+        self._paged_graph = None
+        if paged_cuda_graph:
+            self._paged_graph = GraphedPagedDecoder(
+                model, self.pool, max_batch=max_num_seqs, max_model_len=max_model_len,
+            )
+
         self.allocator = memforge_c.BlockAllocator(num_blocks, block_size)
         # Prefix sharing is opt-out so A/B benchmarking stays possible in one
         # process. With it disabled the scheduler behaves exactly as it did
@@ -218,9 +230,12 @@ class ContinuousBatchingEngine:
         # per concurrent sequence.
         self._draft_pool = None
         if draft_cuda_graph and draft_model is not None and self.lookahead_k > 0:
-            self._draft_pool = GraphedDraftPool(
+            batched = draft_cuda_graph in ("batched", "batched-unrolled")
+            extra = {"unroll": draft_cuda_graph == "batched-unrolled"} if batched else {}
+            pool_cls = BatchedGraphedDraftPool if batched else GraphedDraftPool
+            self._draft_pool = pool_cls(
                 draft_model, max_len=self.max_model_len,
-                num_slots=max_num_seqs, device=self.device,
+                num_slots=max_num_seqs, device=self.device, **extra,
             )
         # K draft tokens plus the bonus token all have to have somewhere to be
         # written before verification can reject any of them, so the scheduler
@@ -995,6 +1010,9 @@ class ContinuousBatchingEngine:
                 continue
             if not prepared:
                 self._begin_write_step(rt, info)
+            if self._paged_graph is not None and not self.block_attention:
+                events.extend(self._decode_graphed([rt]))
+                continue
             ids = torch.tensor([[rt.tokens[-1]]], dtype=torch.long, device=self.device)
             if self.block_attention:
                 # The backend has no reference to the cache from its own
@@ -1045,6 +1063,8 @@ class ContinuousBatchingEngine:
 
         if not rts:
             return []
+        if self._paged_graph is not None and not self.block_attention:
+            return self._decode_graphed(rts)
         if len(rts) == 1:
             # The write step already ran above, so it must not run again.
             return self._run_decode_sequential(infos, prepared=True)
@@ -1125,6 +1145,25 @@ class ContinuousBatchingEngine:
                 events.append(ev)
         return events
 
+    def _decode_graphed(self, rts: List[SequenceRuntime]) -> List[TokenEvent]:
+        """Plain decode for `rts` as one graph replay (writes KV in-graph)."""
+        ctx = [rt.cache.position for rt in rts]
+        logits = self._paged_graph.step(
+            [rt.tokens[-1] for rt in rts], ctx,
+            [rt.cache.block_table_tensor_cached() for rt in rts],
+        )
+        self.total_forward_passes += 1
+        events: List[TokenEvent] = []
+        for i, rt in enumerate(rts):
+            for layer in rt.cache.layers:
+                layer.position += 1
+            ev = self._accept_token(
+                rt, sample_logits(logits[i], rt.params, rt.generator), source="target"
+            )
+            if ev is not None:
+                events.append(ev)
+        return events
+
     # ----------------------------------------------------- speculative decode
 
     @property
@@ -1192,12 +1231,26 @@ class ContinuousBatchingEngine:
                     self._draft_pool.acquire() if self._draft_pool is not None else DraftState()
                 )
             token_counts.append(len(rt.tokens))
-            cand, probs = propose_draft_tokens(
-                self.draft_model, rt.draft, rt.tokens, k,
-                rt.params.temperature, self.device,
+        temps = {rt.params.temperature for rt in candidates_rts}
+        if isinstance(self._draft_pool, BatchedGraphedDraftPool) and len(temps) == 1:
+            # All sequences drafted in K+1 replays total, not per sequence.
+            out = self._draft_pool.propose(
+                [rt.draft for rt in candidates_rts],
+                [rt.tokens for rt in candidates_rts], k, temps.pop(),
             )
-            proposals.append(cand)
-            draft_probs.append(probs)
+            for cand, probs in out:
+                proposals.append(cand)
+                draft_probs.append(probs)
+        else:
+            for rt in candidates_rts:
+                if isinstance(rt.draft, BatchedGraphedDraftState):
+                    raise RuntimeError("batched draft needs one temperature per round")
+                cand, probs = propose_draft_tokens(
+                    self.draft_model, rt.draft, rt.tokens, k,
+                    rt.params.temperature, self.device,
+                )
+                proposals.append(cand)
+                draft_probs.append(probs)
 
         # ---------------------------------------------- 2. verify, batched
         ctx_lens = [rt.cache.position for rt in candidates_rts]

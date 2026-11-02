@@ -1,0 +1,75 @@
+
+==============================================================================
+MemForge Phase C — does a long prompt stall in-flight decoding?
+==============================================================================
+model            : Qwen/Qwen2.5-3B-Instruct
+intruding prompt : 512 tokens
+victim           : 32-token prompt, 16 tokens generated
+budgets          : [0, 64, 16, 4]  (0 = unlimited, the old behaviour)
+Loading weights:   0%|                                                                                                                                        | 0/434 [00:00<?, ?it/s]Loading weights:   0%|▎                                                                                                                               | 1/434 [00:00<04:34,  1.58it/s]Loading weights:  34%|██████████████████████████████████████████▎                                                                                  | 147/434 [00:00<00:01, 266.77it/s]Loading weights:  53%|█████████████████████████████████████████████████████████████████▉                                                           | 229/434 [00:01<00:00, 263.05it/s]Loading weights:  66%|██████████████████████████████████████████████████████████████████████████████████                                           | 285/434 [00:01<00:00, 254.15it/s]Loading weights:  76%|██████████████████████████████████████████████████████████████████████████████████████████████▊                              | 329/434 [00:01<00:00, 244.69it/s]Loading weights:  84%|█████████████████████████████████████████████████████████████████████████████████████████████████████████▏                   | 365/434 [00:01<00:00, 245.25it/s]Loading weights:  91%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████▎          | 397/434 [00:01<00:00, 249.69it/s]Loading weights:  99%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▎ | 428/434 [00:01<00:00, 243.47it/s]Loading weights: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 434/434 [00:01<00:00, 228.61it/s]
+
+==============================================================================
+prefill budget: unlimited tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 1232.098 ms
+  median gap after       : 792.953 ms
+  p99 gap                : 8055.023 ms  (6.54x the victim's own median)
+  worst gap              : 9077.487 ms  (7.37x)
+  prefill chunks         : 2
+  fused steps            : 0
+  forward passes         : 17
+  intruder TTFT          : 9077.5 ms
+
+==============================================================================
+prefill budget: 64 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 645.974 ms
+  median gap after       : 2127.35 ms
+  p99 gap                : 3207.563 ms  (4.97x the victim's own median)
+  worst gap              : 3238.929 ms  (5.01x)
+  prefill chunks         : 9
+  fused steps            : 0
+  forward passes         : 24
+  intruder TTFT          : 21429.5 ms
+
+==============================================================================
+prefill budget: 16 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 668.867 ms
+  median gap after       : 1783.601 ms
+  p99 gap                : 1898.067 ms  (2.84x the victim's own median)
+  worst gap              : 1898.795 ms  (2.84x)
+  prefill chunks         : 34
+  fused steps            : 0
+  forward passes         : 50
+  intruder TTFT          : 42384.3 ms
+
+==============================================================================
+prefill budget: 4 tokens/step
+==============================================================================
+  victim tokens          : 16
+  median gap before      : 691.657 ms
+  median gap after       : 1225.726 ms
+  p99 gap                : 1283.201 ms  (1.86x the victim's own median)
+  worst gap              : 1283.544 ms  (1.86x)
+  prefill chunks         : 136
+  fused steps            : 0
+  forward passes         : 152
+  intruder TTFT          : 88328.5 ms
+
+==============================================================================
+Summary
+==============================================================================
+    budget  fused  median before       p99   p99 x     worst   worst x  chunks  passes
+ unlimited     no        1232.10   8055.02    6.54   9077.49      7.37       2      17
+        64     no         645.97   3207.56    4.97   3238.93      5.01       9      24
+        16     no         668.87   1898.07    2.84   1898.80      2.84      34      50
+         4     no         691.66   1283.20    1.86   1283.54      1.86     136     152
+
+Worst-case stall: 9077.5 ms unlimited vs 1283.5 ms at budget 4 (7.1x better)
+Phase C bullet 1 (chunked prefill): worst-case stall cut 7.1x, from 7.37x the victim's median to 1.86x at budget 4. Target met: in-flight decoding is effectively unaffected.
+
+Wrote benchmarks/results/chunked_prefill.json
