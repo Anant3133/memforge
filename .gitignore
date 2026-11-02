@@ -68,3 +68,8 @@ docs/_runbook.build.html
 .hf_cache/
 .hf_download*.log
 .ipynb_checkpoints/
+
+# project-local tooling
+.tools/
+frontend/node_modules/
+frontend/dist/

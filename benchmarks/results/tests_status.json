@@ -1,0 +1,7 @@
+{
+  "recorded": "2026-11-02",
+  "cpu_suite": {"passed": 417, "skipped": 20, "failed": 0, "consecutive_runs": 3},
+  "gpu_suite": {"passed": 27, "failed": 0, "consecutive_runs": 3, "files": ["test_graphed_paged_decode", "test_batched_graphed_draft", "test_graphed_draft", "test_vocab_padding", "test_int8_linear"]},
+  "mutation_checks": ["batched draft per-row write position", "paged graph causal mask", "graphed draft token sources", "vocab padding"],
+  "regression_gate": {"hard_failures": 0, "regressions": 0}
+}

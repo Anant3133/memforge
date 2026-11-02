@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { BookOpen, ChevronDown, ChevronRight } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
+import { Modal } from './analytics/Modal';
+import './analytics/analytics.css';
 
 /**
  * An expandable explanation attached to a panel.
@@ -11,8 +13,9 @@ import { BookOpen, ChevronDown, ChevronRight } from 'lucide-react';
  * carries the method next to the measurement rather than in a document nobody
  * opens.
  *
- * Collapsed by default: the dashboard's job is the live numbers, and prose that
- * cannot be dismissed competes with them. Rendered as a real <button> with
+ * Opens as a pop-up modal (the same one the Run Analytics page uses) rather than
+ * expanding in place: prose that pushes the live numbers around the page competes
+ * with them, and a modal can be dismissed with Esc or a click outside. Rendered as a real <button> with
  * aria-expanded so it is keyboard reachable and screen readers announce the
  * state, which a clickable <div> would not be.
  */
@@ -36,116 +39,40 @@ export const LearnMore: React.FC<LearnMoreProps> = ({ subject, sections, measure
 
   return (
     <div style={{ marginTop: '10px' }}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '5px',
-          padding: '4px 9px',
-          borderRadius: '6px',
-          border: '1px solid var(--border-color)',
-          background: 'transparent',
-          color: 'var(--text-muted)',
-          font: 'inherit',
-          fontSize: '0.72rem',
-          cursor: 'pointer',
-        }}
-      >
-        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+      <button type="button" className="mf-know" onClick={() => setOpen(true)} aria-haspopup="dialog">
         <BookOpen size={12} />
-        Learn more
+        Know more
       </button>
 
       {open && (
-        <div
-          style={{
-            marginTop: '8px',
-            padding: '12px 14px',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)',
-            background: 'var(--bg-primary)',
-            fontSize: '0.78rem',
-            lineHeight: 1.6,
-            color: 'var(--text-secondary)',
-          }}
-        >
-          <div
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.72rem',
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-              color: 'var(--text-muted)',
-              marginBottom: '10px',
-            }}
-          >
-            {subject}
+        <Modal title={subject} onClose={() => setOpen(false)}>
+          <div className="mf-modal-head">
+            <h2>{subject}</h2>
           </div>
-
-          {sections.map((section) => (
-            <div key={section.heading} style={{ marginBottom: '12px' }}>
-              <div
-                style={{
-                  fontWeight: 700,
-                  color: 'var(--text-primary)',
-                  marginBottom: '3px',
-                }}
-              >
-                {section.heading}
-              </div>
-              {section.body.map((paragraph, i) => (
-                <p key={i} style={{ margin: '0 0 6px' }}>
-                  {paragraph}
-                </p>
-              ))}
-            </div>
-          ))}
-
-          {measured && measured.length > 0 && (
-            <div
-              style={{
-                marginTop: '4px',
-                paddingTop: '10px',
-                borderTop: '1px solid var(--border-color)',
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 700,
-                  color: 'var(--text-primary)',
-                  marginBottom: '6px',
-                }}
-              >
-                Measured on this project
-              </div>
-              {measured.map((row) => (
-                <div
-                  key={row.label}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                    padding: '2px 0',
-                  }}
-                >
-                  <span>{row.label}</span>
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--text-primary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {row.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          <div className="mf-modal-body">
+            {sections.map((section) => (
+              <section key={section.heading}>
+                <h3>{section.heading}</h3>
+                {section.body.map((paragraph, i) => (
+                  <p key={i}>{paragraph}</p>
+                ))}
+              </section>
+            ))}
+            {measured && measured.length > 0 && (
+              <section>
+                <h3>Measured on this project</h3>
+                <dl className="mf-modal-live">
+                  {measured.map((row) => (
+                    <React.Fragment key={row.label}>
+                      <dt>{row.label}</dt>
+                      <dd>{row.value}</dd>
+                    </React.Fragment>
+                  ))}
+                </dl>
+              </section>
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   );

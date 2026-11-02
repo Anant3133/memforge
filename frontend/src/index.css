@@ -170,3 +170,11 @@ body {
     animation: none;
   }
 }
+
+/* Top-level view tabs */
+.mf-tabs { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 22px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-color); max-width: 100%; }
+.mf-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 8px 16px; border: 0; border-radius: 9px; background: transparent; color: var(--text-secondary); font: inherit; font-size: .85rem; cursor: pointer; transition: all .2s; white-space: nowrap; }
+.mf-tabs button:hover { color: var(--text-primary); }
+.mf-tabs button.on { background: linear-gradient(135deg, var(--accent-cyan), var(--accent-emerald)); color: #04141a; font-weight: 700; }
+:root[data-theme='light'] .mf-tabs button.on { color: #fff; }
+.mf-tabs button:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }

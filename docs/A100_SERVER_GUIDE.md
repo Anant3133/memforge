@@ -163,3 +163,26 @@ python scripts/summarize_runs.py
   every GPU timing here.
 * `nvidia-smi` lists other containers' processes as `[Not Found]`; their PIDs
   cannot be inspected from here.
+
+---
+
+## 6. Dashboard (Run Analytics) and UI checks
+
+The React dashboard has two tabs: **Run Analytics** (every archived run: KPIs, target scoreboard, paged decode,
+speculative decoding, chunked prefill, prefix sharing, Qwen3-14B, fp16 equivalence, soak tests, run inventory) and
+**Live Engine** (the original live telemetry). Every statistic has a **Know more** button that opens a pop-up
+explaining what it is, why it is tracked, how it is measured, how to read it, caveats, and which files to look at.
+
+```bash
+python -m server.app                       # API; GET /v1/results aggregates benchmarks/results/runs/
+cd frontend && npm install && npx vite     # dashboard at http://localhost:3000
+```
+
+No Node on the server? A project-local copy goes in `.tools/` (gitignored):
+`curl -sSL https://nodejs.org/dist/v20.18.0/node-v20.18.0-linux-x64.tar.xz | tar -xJ -C .tools && mv .tools/node-* .tools/node`.
+
+UI audits (`frontend/e2e/`): a headless Chromium checks five widths (360-1440px) on both tabs for horizontal overflow
+and console errors, and opens all 34 Know-more modals. On a bare server Chromium needs shared libraries and a font; they
+can be fetched without root or system changes: `apt-get download libnspr4 libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64
+libatspi2.0-0t64 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxkbcommon0 libxi6 libfontconfig1 fontconfig-config
+fonts-dejavu-core`, `dpkg -x` each into a project folder, and point `LD_LIBRARY_PATH` and `FONTCONFIG_FILE` at it.

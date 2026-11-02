@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Layers, Server, Cpu, AlertTriangle } from 'lucide-react';
+import { Layers, Server, Cpu, AlertTriangle, Activity, BarChart3 } from 'lucide-react';
+import { ResultsDashboard } from './components/analytics/ResultsDashboard';
 import { TelemetryMetrics } from './components/TelemetryMetrics';
 import { MemoryVisualizer } from './components/MemoryVisualizer';
 import { SpeculativeDiff, StreamToken } from './components/SpeculativeDiff';
@@ -78,6 +79,14 @@ export const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [engine, setEngine] = useState<EngineInfo | null>(null);
+
+  const [view, setView] = useState<'live' | 'analytics'>(() => {
+    try { return (localStorage.getItem('mf-view') as 'live' | 'analytics') || 'analytics'; } catch { return 'analytics'; }
+  });
+  const switchView = (v: 'live' | 'analytics') => {
+    setView(v);
+    try { localStorage.setItem('mf-view', v); } catch { /* storage unavailable */ }
+  };
 
   const streamRef = useRef<StreamClient | null>(null);
 
@@ -403,6 +412,18 @@ export const App: React.FC = () => {
         </div>
       </header>
 
+      <div className="mf-tabs" role="tablist" aria-label="Dashboard view">
+        <button type="button" role="tab" aria-selected={view === 'analytics'} className={view === 'analytics' ? 'on' : ''} onClick={() => switchView('analytics')}>
+          <BarChart3 size={15} /> Run Analytics
+        </button>
+        <button type="button" role="tab" aria-selected={view === 'live'} className={view === 'live' ? 'on' : ''} onClick={() => switchView('live')}>
+          <Activity size={15} /> Live Engine
+        </button>
+      </div>
+
+      {view === 'analytics' && <ResultsDashboard />}
+
+      {view === 'live' && (<>
       <StatusBanner
         connection={connection}
         engineReady={engineReady}
@@ -497,6 +518,7 @@ export const App: React.FC = () => {
       </div>
 
       <ChatStream onSend={handleSendPrompt} isStreaming={isStreaming} />
+      </>)}
     </div>
   );
 };

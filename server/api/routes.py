@@ -120,6 +120,14 @@ def _sampling(
     )
 
 
+@router.get("/v1/results")
+async def archived_results():
+    """Everything the Run Analytics dashboard shows, aggregated from the archived runs."""
+    from server.results_data import get_results
+
+    return get_results()
+
+
 @router.get("/v1/health")
 async def health_check():
     return {
