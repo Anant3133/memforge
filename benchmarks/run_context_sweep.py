@@ -227,7 +227,7 @@ class GraphedArms:
     region contains replays only.
     """
 
-    def __init__(self, model, spec, prompt_len, steps, block_size):
+    def __init__(self, model, spec, prompt_len, steps, block_size, triton=False):
         from memforge_ml.runtime.batched_speculative import GraphedDraftPool
         from memforge_ml.runtime.graphed_paged_decode import GraphedPagedDecoder
 
@@ -239,6 +239,10 @@ class GraphedArms:
         self.blocks = blocks
         self.pdec = GraphedPagedDecoder(model, self.pool, max_batch=1,
                                         max_model_len=total, ctx_bucket=int(__import__("os").environ.get("CTX_BUCKET", "32")))
+        # Same pool, same graph machinery, but attention reads the pool directly (no gather copy).
+        self.tdec = (GraphedPagedDecoder(model, self.pool, max_batch=1, max_model_len=total,
+                                         ctx_bucket=int(__import__("os").environ.get("CTX_BUCKET", "32")),
+                                         attn_kernel="triton") if triton else None)
 
     @torch.no_grad()
     def contiguous(self, prompt_ids, steps):
@@ -257,7 +261,8 @@ class GraphedArms:
                 "tok_per_s": steps / decode_s if decode_s > 0 else 0.0}
 
     @torch.no_grad()
-    def paged(self, prompt_ids, steps):
+    def paged(self, prompt_ids, steps, use_triton=False):
+        dec = self.tdec if use_triton else self.pdec
         cache = PagedCache(self.pool, list(range(self.blocks)))
         ids = torch.tensor([prompt_ids], dtype=torch.long, device=_model_device(self.model))
         t0 = time.perf_counter()
@@ -269,7 +274,7 @@ class GraphedArms:
         logits = out.logits[0, -1]
         for _ in range(steps):
             tok = int(logits.argmax()); tokens.append(tok)
-            logits = self.pdec.step([tok], [cache.position], [table])[0]
+            logits = dec.step([tok], [cache.position], [table])[0]
             for layer in cache.layers:
                 layer.position += 1
         decode_s = time.perf_counter() - t0
@@ -339,6 +344,8 @@ def main() -> int:
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--kv-budget-mb", type=float, default=1024.0)
     parser.add_argument("--skip-batched", action="store_true")
+    parser.add_argument("--triton", action="store_true",
+                        help="with --graphed: also measure the graphed paged step with the Triton kernel (no gather)")
     parser.add_argument("--graphed", action="store_true",
                         help="also measure CUDA-graphed paged and graphed contiguous (GPU only)")
     parser.add_argument("--view-cache", action="store_true",
@@ -391,10 +398,13 @@ def main() -> int:
         graphed_c, graphed_p = [], []
         graphed_c_tokens = graphed_p_tokens = None
         if args.graphed:
-            arms = GraphedArms(model, spec, len(prompt), args.steps, args.block_size)
+            arms = GraphedArms(model, spec, len(prompt), args.steps, args.block_size, triton=args.triton)
+            graphed_t, graphed_t_tokens = [], None
             for _ in range(max(2, args.warmup)):  # captures happen here, untimed
                 arms.contiguous(prompt, args.steps)
                 arms.paged(prompt, args.steps)
+                if args.triton:
+                    arms.paged(prompt, args.steps, use_triton=True)
         for _ in range(max(0, args.warmup)):
             decode_contiguous(model, prompt, args.steps)
             decode_paged(model, spec, prompt, args.steps, args.block_size)
@@ -415,6 +425,10 @@ def main() -> int:
                 gp_ = arms.paged(prompt, args.steps)
                 graphed_c.append(gc_["tok_per_s"]); graphed_p.append(gp_["tok_per_s"])
                 graphed_c_tokens, graphed_p_tokens = gc_["tokens"], gp_["tokens"]
+                if args.triton:
+                    gt_ = arms.paged(prompt, args.steps, use_triton=True)
+                    graphed_t.append(gt_["tok_per_s"]); graphed_t_tokens = gt_["tokens"]
+                    line += f" | paged-triton {gt_['tok_per_s']:6.2f}"
                 line += (f" | contiguous-graphed {gc_['tok_per_s']:6.2f} | "
                          f"paged-graphed {gp_['tok_per_s']:6.2f}")
             if args.view_cache:
@@ -505,6 +519,19 @@ def main() -> int:
                 "paged_graphed_samples": [round(x, 3) for x in graphed_p],
                 "contiguous_graphed_samples": [round(x, 3) for x in graphed_c],
             }
+            if graphed_t:
+                gt_med = statistics.median(graphed_t)
+                row["graphed"].update({
+                    "paged_triton_tok_per_s": round(gt_med, 3),
+                    "paged_triton_vs_contiguous_eager": round(gt_med / cont, 4),
+                    "paged_triton_vs_contiguous_graphed": round(gt_med / gc_med, 4),
+                    "paged_triton_vs_paged_graphed": round(gt_med / gp_med, 4),
+                    "paged_triton_output_matches_contiguous": graphed_t_tokens == cont_tokens,
+                    "paged_triton_samples": [round(x, 3) for x in graphed_t],
+                })
+                print(f"  triton: paged-triton/contiguous-eager = {gt_med / cont:.3f}x, "
+                      f"vs gather-graphed {gt_med / gp_med:.3f}x, "
+                      f"output matches: {graphed_t_tokens == cont_tokens}")
             g = row["graphed"]
             print(f"  graphed: paged/contiguous = {g['paged_graphed_vs_contiguous_graphed']:.3f}x "
                   f"(graphed both), paged-graphed/contiguous-eager = "

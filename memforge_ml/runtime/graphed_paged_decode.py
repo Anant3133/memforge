@@ -26,9 +26,44 @@ padding masked out.
 
 from __future__ import annotations
 
-from typing import Dict, Sequence, Tuple
+from contextlib import contextmanager
+from typing import Dict, Optional, Sequence, Tuple
 
 import torch
+
+#: attention-registry name for the Triton paged-decode path (see `_register_triton_attention`).
+TRITON_ATTN = "memforge_graph_paged"
+_ACTIVE: Optional["GraphedPagedDecoder"] = None
+
+
+def _register_triton_attention() -> None:
+    """Register the attention function (and its mask alias) once."""
+    from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+    if TRITON_ATTN not in ALL_ATTENTION_FUNCTIONS:
+        ALL_ATTENTION_FUNCTIONS[TRITON_ATTN] = _triton_attention_forward
+    if TRITON_ATTN not in ALL_MASK_ATTENTION_FUNCTIONS:
+        ALL_MASK_ATTENTION_FUNCTIONS[TRITON_ATTN] = ALL_MASK_ATTENTION_FUNCTIONS["sdpa"]
+
+
+def _triton_attention_forward(module, query, key, value, attention_mask, scaling=None,
+                              dropout=0.0, **kwargs):
+    """Single-token attention read straight from the pool via the block table."""
+    from memforge_ml.kernels.triton_paged_decode import paged_decode_attention
+
+    o = _ACTIVE
+    if o is None:  # not inside a graphed step: behave exactly like sdpa
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+        return sdpa_attention_forward(module, query, key, value, attention_mask,
+                                      scaling=scaling, dropout=dropout, **kwargs)
+    i, b = module.layer_idx, o._b
+    out = paged_decode_attention(
+        query[:, :, 0], o._flat_k[i], o._flat_v[i], o._table[:b], o._ctx[:b],
+        o.bs, o._P, scaling if scaling is not None else query.shape[-1] ** -0.5,
+        num_splits=o.num_splits,
+    )
+    return out.unsqueeze(1), None  # (B, 1, Hq, D): the layout attention functions return
 
 
 def _make_layer_class():
@@ -50,6 +85,9 @@ def _make_layer_class():
             # (B, H, 1, D) -> (B, H, D), written at each row's physical slot.
             o._flat_k[i][widx] = key_states[:, :, 0]
             o._flat_v[i][widx] = value_states[:, :, 0]
+            if o.attn_kernel == "triton":
+                # The kernel reads the pool itself; nothing to gather.
+                return key_states, value_states
             g = o._gidx[:b, :P]
             return (
                 o._flat_k[i][g].permute(0, 2, 1, 3),
@@ -74,8 +112,18 @@ def _make_layer_class():
 class GraphedPagedDecoder:
     """Decode one token for each of B sequences against the paged pool, as a graph."""
 
-    def __init__(self, model, pool, max_batch: int, max_model_len: int, ctx_bucket: int = 32):
+    def __init__(self, model, pool, max_batch: int, max_model_len: int, ctx_bucket: int = 32,
+                 attn_kernel: str = "gather", num_splits: int = 8):
         from transformers.cache_utils import Cache
+
+        if attn_kernel not in ("gather", "triton"):
+            raise ValueError(f"attn_kernel must be 'gather' or 'triton', got {attn_kernel!r}")
+        if attn_kernel == "triton":
+            from memforge_ml.kernels import triton_paged_decode
+            if not triton_paged_decode.available():
+                raise ValueError("attn_kernel='triton' needs triton and CUDA")
+            _register_triton_attention()
+        self.attn_kernel, self.num_splits = attn_kernel, num_splits
 
         impl = getattr(model.config, "_attn_implementation", None)
         if impl != "sdpa":
@@ -103,6 +151,7 @@ class GraphedPagedDecoder:
         # context: reallocating would move an address a captured graph reads.
         self._gidx = torch.zeros((mb, self.max_blocks * self.bs), dtype=torch.long, device=dev)
         self._cp0 = torch.zeros(1, dtype=torch.long, device=dev)
+        self._ctx = torch.ones(mb, dtype=torch.int32, device=dev)
         layer_cls = _make_layer_class()
         self.cache = Cache(layers=[layer_cls(self, i) for i in range(n)])
         self._mem_pool = torch.cuda.graph_pool_handle()
@@ -132,12 +181,38 @@ class GraphedPagedDecoder:
         rows = torch.arange(b, device=self.device)
         self._widx[:b].copy_(tbl[rows, pos // bs] * bs + pos % bs)
         ar = torch.arange(P, device=self.device)
-        self._gidx[:b, :P].copy_(tbl[:, ar // bs] * bs + (ar % bs)[None, :])
+        if self.attn_kernel == "triton":
+            self._ctx[:b].copy_(pos + 1)
+        else:
+            self._gidx[:b, :P].copy_(tbl[:, ar // bs] * bs + (ar % bs)[None, :])
         mask = (ar[None, :] <= pos[:, None])[:, None, None, :]
-        return self.model(
-            input_ids=self._tok[:b], position_ids=pos[:, None], past_key_values=self.cache,
-            attention_mask=mask, cache_position=self._cp0, use_cache=True,
-        ).logits[:, -1]
+        with self._attention_mode():
+            return self.model(
+                input_ids=self._tok[:b], position_ids=pos[:, None], past_key_values=self.cache,
+                attention_mask=mask, cache_position=self._cp0, use_cache=True,
+            ).logits[:, -1]
+
+    @contextmanager
+    def _attention_mode(self):
+        """Route attention through the Triton kernel for this one forward only."""
+        global _ACTIVE
+        if self.attn_kernel != "triton":
+            yield
+            return
+        cfgs = [self.model.config] + [
+            c for c in (getattr(self.model.config, a, None) for a in ("text_config", "decoder"))
+            if c is not None and hasattr(c, "_attn_implementation")
+        ]
+        saved = [c._attn_implementation for c in cfgs]
+        for c in cfgs:
+            c._attn_implementation = TRITON_ATTN
+        _ACTIVE = self
+        try:
+            yield
+        finally:
+            _ACTIVE = None
+            for c, v in zip(cfgs, saved):
+                c._attn_implementation = v
 
     @torch.no_grad()
     def _capture(self, b: int, P: int) -> None:

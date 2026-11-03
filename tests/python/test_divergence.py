@@ -55,3 +55,11 @@ def test_summary_equivalent_only_if_every_divergence_explained():
     bad = {"explained": False}
     assert summarize([None, ok])["equivalent"]
     assert not summarize([None, ok, bad])["equivalent"]
+
+
+def test_device_auto_is_resolved_from_the_model():
+    """Regression: the benchmark CLI default `--device auto` reached torch.tensor() and crashed."""
+    m = Stub([10.0, 20.0, 20.01, 0.0])
+    for dev in ("auto", None):
+        r = explain_divergence(m, [0], [1], [2], dev)
+        assert r["explained"]

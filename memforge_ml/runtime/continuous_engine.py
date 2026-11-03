@@ -149,6 +149,7 @@ class ContinuousBatchingEngine:
         draft_model=None,
         lookahead_k: int = 0,
         fused_prefill: bool = False,
+        paged_attn_kernel: str = "gather",  # "gather" | "triton" (read KV from the pool, no copy)
         draft_cuda_graph=False,  # False | True (per-sequence graphs) | "batched"
         paged_cuda_graph=False,  # False | True | "auto" (on when CUDA + sdpa allow it)
     ):
@@ -222,6 +223,7 @@ class ContinuousBatchingEngine:
         if paged_cuda_graph:
             self._paged_graph = GraphedPagedDecoder(
                 model, self.pool, max_batch=max_num_seqs, max_model_len=max_model_len,
+                attn_kernel=paged_attn_kernel,
             )
 
         self.allocator = memforge_c.BlockAllocator(num_blocks, block_size)

@@ -81,3 +81,41 @@ def test_block_table_longer_than_needed_is_accepted(models):
     table = torch.arange(60, dtype=torch.long, device="cuda")  # far more than max_blocks
     logits = dec.step([1], [3], [table])
     assert logits.shape[0] == 1 and torch.isfinite(logits).all()
+
+
+def test_triton_kernel_tokens_identical(models):
+    """Reading KV straight from the pool (no gather) must not change a token."""
+    from memforge_ml.kernels import triton_paged_decode
+    if not triton_paged_decode.available():
+        pytest.skip("needs triton")
+    for slots in (1, 4):
+        _, ref = run(models, slots=slots)
+        eng, got = run(models, slots=slots, paged_cuda_graph=True, paged_attn_kernel="triton")
+        assert got == ref
+        assert eng._paged_graph.replays > 0
+
+
+def test_triton_kernel_crosses_context_bucket(models):
+    from memforge_ml.kernels import triton_paged_decode
+    if not triton_paged_decode.available():
+        pytest.skip("needs triton")
+    tok = models[0]
+    unit = "Paged attention stores keys and values in blocks. "
+    text = unit
+    while len(tok(text)["input_ids"]) < 110:
+        text += unit
+    _, ref = run(models, [text], slots=1)
+    eng, got = run(models, [text], slots=1, paged_cuda_graph=True, paged_attn_kernel="triton")
+    assert got == ref
+    assert eng._paged_graph.captures >= 2
+
+
+def test_triton_attention_is_scoped_to_the_graphed_step(models):
+    """After a graphed step the model must be back on sdpa (prefill, other engines)."""
+    tok, t = models
+    from memforge_ml.runtime.graphed_paged_decode import _ACTIVE
+    before = t.config._attn_implementation
+    run(models, slots=1, paged_cuda_graph=True, paged_attn_kernel="triton")
+    assert t.config._attn_implementation == before
+    from memforge_ml.runtime import graphed_paged_decode as g
+    assert g._ACTIVE is None

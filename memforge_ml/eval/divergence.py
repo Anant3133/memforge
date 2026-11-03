@@ -60,6 +60,9 @@ def explain_divergence(
         return {"index": i, "kind": "length", "explained": False,
                 "note": f"runs have different lengths ({len(a)} vs {len(b)})"}
     ctx = list(prompt_ids) + list(a[:i])
+    # `device` may be "auto"/None (a benchmark's CLI default); the model knows where it lives.
+    if device is None or str(device) == "auto":
+        device = next(model.parameters()).device
     ids = torch.tensor([ctx], dtype=torch.long, device=device)
     logits = model(input_ids=ids, use_cache=False).logits[0, -1].float()
     za, zb = float(logits[a[i]]), float(logits[b[i]])
